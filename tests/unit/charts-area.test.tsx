@@ -80,8 +80,16 @@ test("PeriodizationBars renders 16 bars", () => {
 });
 
 test("SleepStagesBar shows Deep 1:07 legend given deepMin 67", () => {
-  const { getByText } = render(
+  const { getByText, container } = render(
     <SleepStagesBar deepMin={67} remMin={85} lightMin={188} needMin={464} />
   );
   expect(getByText(/Deep 1:07/)).toBeInTheDocument();
+
+  // Assert deep segment uses canonical color (#2c5b86 = rgb(44, 91, 134))
+  const allDivs = container.querySelectorAll('div');
+  const deepSegment = Array.from(allDivs).find(div => {
+    const style = div.getAttribute('style') || '';
+    return style.includes('rgb(44, 91, 134)');
+  });
+  expect(deepSegment).toBeTruthy();
 });

@@ -28,13 +28,13 @@ export function SleepStagesBar({
           gap: 2,
         }}
       >
-        <div style={{ width: `${deepPct}%`, background: "#2b5f8f" }} />
+        <div style={{ width: `${deepPct}%`, background: "#2c5b86" }} />
         <div style={{ width: `${remPct}%`, background: "#34B3E6" }} />
         <div style={{ width: `${lightPct}%`, background: "#7CB3D9" }} />
       </div>
       <div style={{ display: "flex", gap: 14, marginTop: 10 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "600 10px var(--font-ui)", color: "#8a919c" }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: "#2b5f8f" }} />
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: "#2c5b86" }} />
           Deep {formatHM(deepMin)}
         </span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "600 10px var(--font-ui)", color: "#8a919c" }}>
