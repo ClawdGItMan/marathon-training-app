@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 type Tab = {
   label: string;
   href: string;
-  size: number;
   icon: React.ReactNode;
 };
 
@@ -14,7 +13,6 @@ const tabs: Tab[] = [
   {
     label: "TODAY",
     href: "/today",
-    size: 22,
     icon: (
       <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="3.1"></circle>
@@ -25,7 +23,6 @@ const tabs: Tab[] = [
   {
     label: "PLAN",
     href: "/plan",
-    size: 22,
     icon: (
       <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <rect x="5.5" y="6.5" width="13" height="12" rx="2"></rect>
@@ -36,7 +33,6 @@ const tabs: Tab[] = [
   {
     label: "COACH",
     href: "/coach",
-    size: 23,
     icon: (
       <svg width={23} height={23} viewBox="0 0 24 24" fill="none">
         <circle cx="12" cy="13.8" r="6.8" stroke="currentColor" strokeWidth={1.9}></circle>
@@ -47,7 +43,6 @@ const tabs: Tab[] = [
   {
     label: "BODY",
     href: "/body",
-    size: 22,
     icon: (
       <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
         <circle cx="12" cy="6" r="2.5" fill="currentColor"></circle>
@@ -58,7 +53,6 @@ const tabs: Tab[] = [
   {
     label: "PROGRESS",
     href: "/progress",
-    size: 22,
     icon: (
       <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 18l5-6 3.5 3.5L20 7"></path>
