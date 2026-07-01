@@ -1,7 +1,5 @@
+import { BodyScreen } from "@/components/body/BodyScreen";
+
 export default function BodyPage() {
-  return (
-    <div className="p-4">
-      <h1 className="text-[22px] font-bold">BODY</h1>
-    </div>
-  );
+  return <BodyScreen />;
 }
