@@ -28,3 +28,7 @@
 body {
   background-color: #11151b;
 }
+
+@keyframes area-wipe {
+  to { clip-path: inset(0 0 0 0); }
+}
