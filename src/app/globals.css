@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-ui: var(--font-archivo);
+  --font-num: var(--font-geist);
+}
+
+.bg-app {
+  background: radial-gradient(130% 70% at 50% -8%, #1c232c 0%, #11151b 56%);
+}
+
+body {
+  background-color: #11151b;
+}
