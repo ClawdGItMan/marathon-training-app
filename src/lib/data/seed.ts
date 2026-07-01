@@ -189,7 +189,7 @@ export const seed: Seed = {
       rhr: 52,
       rhrDelta: 3,
       respRate: 14.2,
-      sleep: { durationMin: 372, needMin: 464, efficiencyPct: 88, deepMin: 67, remMin: 85, lightMin: 188 },
+      sleep: { durationMin: 372, needMin: 464, efficiencyPct: 78, deepMin: 67, remMin: 85, lightMin: 188 },
       load: 1.28,
       loadLabel: "elevated",
     },

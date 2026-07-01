@@ -3,11 +3,13 @@ export function SectionHeader({
   accent,
   action,
   actionHref,
+  actionAriaLabel,
 }: {
   label: string;
   accent: string;
   action?: string;
   actionHref?: string;
+  actionAriaLabel?: string;
 }) {
   return (
     <div className="mt-[22px] mb-[10px] flex items-center justify-between">
@@ -23,6 +25,7 @@ export function SectionHeader({
       {action ? (
         <a
           href={actionHref}
+          aria-label={actionAriaLabel}
           className="font-ui text-[11px] font-semibold text-ink-faint"
         >
           {action}
