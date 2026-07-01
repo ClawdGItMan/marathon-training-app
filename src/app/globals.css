@@ -53,6 +53,10 @@
   .hairline-top {
     border-top: 1px solid var(--hair);
   }
+
+  .hairline-r {
+    border-right: 1px solid var(--hair);
+  }
 }
 
 /* V1 COMPAT — remove in R5-R7
