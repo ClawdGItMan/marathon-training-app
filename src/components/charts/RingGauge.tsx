@@ -10,14 +10,14 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 export function RingGauge({
   value,
   max = 100,
-  color,
+  color = "#e8eaec",
   size = 104,
-  stroke = 8,
+  stroke = 5,
   children,
 }: {
   value: number;
   max?: number;
-  color: string;
+  color?: string;
   size?: number;
   stroke?: number;
   children?: ReactNode;
@@ -45,7 +45,8 @@ export function RingGauge({
     arc.style.strokeDashoffset = String(CIRCUMFERENCE);
 
     const id = requestAnimationFrame(() => {
-      arc.style.transition = "stroke-dashoffset 1.3s cubic-bezier(.2,.7,.2,1)";
+      // ringIn sweep per design #7c: 1.2s cubic-bezier(.3,.7,.2,1)
+      arc.style.transition = "stroke-dashoffset 1.2s cubic-bezier(.3,.7,.2,1)";
       arc.style.strokeDashoffset = String(targetOffset);
     });
 
@@ -63,7 +64,7 @@ export function RingGauge({
           cy={CENTER}
           r={RADIUS}
           fill="none"
-          stroke="rgba(255,255,255,.08)"
+          stroke="#242930"
           strokeWidth={stroke}
         />
         <circle

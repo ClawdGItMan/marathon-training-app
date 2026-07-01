@@ -1,5 +1,22 @@
 import { formatHM } from "@/lib/format";
 
+// Stage greys per design #7c SLEEP: brightness encodes depth (deep brightest),
+// remainder-of-need reads as the darkest track. No blues, no per-stage hues.
+const STAGE_COLOR = {
+  deep: "#e8eaec",
+  rem: "#7c828a",
+  light: "#363d46",
+  empty: "#1c2025",
+};
+
+const LEGEND_STYLE = {
+  font: "500 8px var(--font-mono)",
+  letterSpacing: ".1em",
+  color: "#5c6168",
+  textTransform: "uppercase",
+  whiteSpace: "nowrap",
+} as const;
+
 export function SleepStagesBar({
   deepMin,
   remMin,
@@ -21,30 +38,21 @@ export function SleepStagesBar({
       <div
         style={{
           display: "flex",
-          height: 10,
-          borderRadius: 2,
-          overflow: "hidden",
-          background: "rgba(255,255,255,.08)",
           gap: 2,
+          height: 8,
+          borderRadius: 1,
+          overflow: "hidden",
         }}
       >
-        <div style={{ width: `${deepPct}%`, background: "#2c5b86" }} />
-        <div style={{ width: `${remPct}%`, background: "#34B3E6" }} />
-        <div style={{ width: `${lightPct}%`, background: "#7CB3D9" }} />
+        <div style={{ width: `${deepPct}%`, background: STAGE_COLOR.deep }} />
+        <div style={{ width: `${remPct}%`, background: STAGE_COLOR.rem }} />
+        <div style={{ width: `${lightPct}%`, background: STAGE_COLOR.light }} />
+        <div style={{ flex: 1, background: STAGE_COLOR.empty }} />
       </div>
-      <div style={{ display: "flex", gap: 14, marginTop: 10 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "600 10px var(--font-ui)", color: "#8a919c" }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: "#2c5b86" }} />
-          Deep {formatHM(deepMin)}
-        </span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "600 10px var(--font-ui)", color: "#8a919c" }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: "#34B3E6" }} />
-          REM {formatHM(remMin)}
-        </span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "600 10px var(--font-ui)", color: "#8a919c" }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: "#7CB3D9" }} />
-          Light {formatHM(lightMin)}
-        </span>
+      <div style={{ display: "flex", gap: 16, marginTop: 9 }}>
+        <span style={LEGEND_STYLE}>Deep {formatHM(deepMin)}</span>
+        <span style={LEGEND_STYLE}>REM {formatHM(remMin)}</span>
+        <span style={LEGEND_STYLE}>Light {formatHM(lightMin)}</span>
       </div>
     </div>
   );

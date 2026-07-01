@@ -5,14 +5,18 @@ export type PeriodizationWeek = {
   mi: number;
 };
 
+// Phase greys per design #7a (16-WEEK BLOCK): volume reads through height,
+// phase through grey step; only the current week carries signal lime.
 const PHASE_COLOR: Record<PeriodizationPhase, string> = {
-  base: "#7CB3D9",
-  build: "#7CB3D9",
-  peak: "#FFCE3F",
-  taper: "rgba(255,255,255,.25)",
+  base: "#242930",
+  build: "#2d333b",
+  peak: "#363d46",
+  taper: "#242930",
 };
 
-const DIMMED_COLOR = "rgba(255,255,255,.1)";
+const SIGNAL = "#C9F53F";
+const FIRST_DELAY_S = 0.08;
+const STAGGER_S = 0.035;
 
 export function PeriodizationBars({
   weeks,
@@ -38,37 +42,55 @@ export function PeriodizationBars({
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span style={{ font: "700 12px var(--font-ui)", letterSpacing: ".05em", color: "#fff" }}>
+        <span
+          style={{
+            font: "500 10px var(--font-mono)",
+            letterSpacing: ".18em",
+            color: "#9aa0a7",
+            whiteSpace: "nowrap",
+          }}
+        >
           16-WEEK BLOCK
         </span>
         {peakLabel ? (
-          <span style={{ font: "600 11px var(--font-ui)", color: "#8a919c" }}>{peakLabel}</span>
+          <span
+            style={{
+              font: "500 9px var(--font-mono)",
+              letterSpacing: ".1em",
+              color: "#5c6168",
+              textTransform: "uppercase",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {peakLabel}
+          </span>
         ) : null}
       </div>
       <div
         style={{
           display: "flex",
           alignItems: "flex-end",
-          gap: "3px",
-          height: 42,
+          gap: "4px",
+          height: 56,
           marginTop: 12,
         }}
       >
         {weeks.map((week, i) => {
           const heightPct = Math.max((week.mi / maxMi) * 100, 4);
-          const dimmed = i > currentWeek - 1;
-          const color = dimmed ? DIMMED_COLOR : PHASE_COLOR[week.phase];
+          const isCurrent = i === currentWeek - 1;
           return (
             <div
               key={i}
               data-bar
+              data-anim=""
               data-phase={week.phase}
-              className="flex-1"
               style={{
                 flex: 1,
                 height: `${heightPct}%`,
-                background: color,
+                background: isCurrent ? SIGNAL : PHASE_COLOR[week.phase],
                 borderRadius: 1,
+                transformOrigin: "bottom",
+                animation: `barUp .55s cubic-bezier(.2,.7,.3,1) ${(FIRST_DELAY_S + i * STAGGER_S).toFixed(3)}s both`,
               }}
             />
           );
@@ -77,10 +99,10 @@ export function PeriodizationBars({
       <div
         style={{
           display: "flex",
-          marginTop: 9,
-          font: "700 8.5px var(--font-ui)",
-          letterSpacing: ".06em",
-          color: "#697079",
+          marginTop: 8,
+          font: "500 8px var(--font-mono)",
+          letterSpacing: ".12em",
+          color: "#5c6168",
         }}
       >
         {phaseOrder.map((phase, i) => (

@@ -1,17 +1,21 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+import { useDashDrawIn } from "./useDashDrawIn";
 
 const VIEWBOX_WIDTH = 100;
 
 export function Sparkline({
   points,
-  color,
+  color = "#565b62",
   height = 40,
+  endDotColor,
 }: {
   points: number[];
-  color: string;
+  color?: string;
   height?: number;
+  /** Renders an endpoint dot at the last datum (lime for "live now" per design #7c VITALS). Omit for no dot. */
+  endDotColor?: string;
 }) {
   const polylineRef = useRef<SVGPolylineElement>(null);
 
@@ -24,44 +28,12 @@ export function Sparkline({
     const x = points.length > 1 ? i * step : VIEWBOX_WIDTH / 2;
     // Higher value -> higher on screen (smaller y).
     const y = height - ((p - min) / range) * height;
-    return `${x},${y}`;
+    return { x, y };
   });
-  const pointsKey = coords.join(" ");
+  const pointsAttr = coords.map((c) => `${c.x},${c.y}`).join(" ");
+  const last = coords[coords.length - 1];
 
-  useEffect(() => {
-    const polyline = polylineRef.current;
-    if (!polyline) return;
-
-    if (typeof polyline.getTotalLength !== "function") {
-      // jsdom / unsupported environments: skip animation, render final state.
-      return;
-    }
-
-    const length = polyline.getTotalLength();
-
-    const prefersReducedMotion =
-      typeof window !== "undefined" &&
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    if (prefersReducedMotion) {
-      polyline.style.transition = "none";
-      polyline.style.strokeDasharray = "none";
-      polyline.style.strokeDashoffset = "0";
-      return;
-    }
-
-    polyline.style.transition = "none";
-    polyline.style.strokeDasharray = String(length);
-    polyline.style.strokeDashoffset = String(length);
-
-    const id = requestAnimationFrame(() => {
-      polyline.style.transition = "stroke-dashoffset 1.3s cubic-bezier(.2,.7,.2,1)";
-      polyline.style.strokeDashoffset = "0";
-    });
-
-    return () => cancelAnimationFrame(id);
-  }, [pointsKey]);
+  useDashDrawIn(polylineRef, pointsAttr);
 
   return (
     <svg
@@ -73,13 +45,23 @@ export function Sparkline({
     >
       <polyline
         ref={polylineRef}
-        points={coords.join(" ")}
+        points={pointsAttr}
         fill="none"
         stroke={color}
-        strokeWidth={2}
+        strokeWidth={1.4}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+      {endDotColor && last ? (
+        <circle
+          cx={last.x}
+          cy={last.y}
+          r={2.6}
+          fill={endDotColor}
+          data-anim=""
+          style={{ animation: "segIn .4s ease 1.4s both, limePulse 3.2s ease-in-out 2s infinite" }}
+        />
+      ) : null}
     </svg>
   );
 }
