@@ -8,9 +8,9 @@
 
 ## 1. Product overview
 
-A readiness-driven marathon training app. Every day it reads the user's body (Whoop recovery, sleep, training load) and training history (Strava runs, logged pain/RPE), and **proposes** adjustments to a periodized 16-week run + strength plan. The product's spine is consent-based coaching:
+A readiness-driven marathon training app. Every day it reads the user's body (Whoop recovery, sleep, training load) and training history (Strava runs, logged pain/RPE), and **proposes** adjustments to a periodized run + strength plan spanning today through race day (8-week base + 16-week build→peak→taper; see §5). The product's spine is consent-based coaching:
 
-> **The AI suggests; the user decides. Nothing in the plan ever changes without explicit Accept.**
+> **The AI suggests; the user decides. Nothing in the plan ever changes without an explicit user decision (Accept, or Modify-and-save).**
 
 Core capabilities:
 1. Daily and weekly plan **proposals** (suggestion-only, in-context Accept / Modify / Override).
@@ -130,7 +130,7 @@ Single authenticated user (Supabase Auth), but all tables still carry `user_id` 
 ## 12. Testing
 
 - **Vitest:** proposal-engine decision rules (readiness/pain thresholds), `deltaColor(pct)` scale, prediction math, session/activity matching, Zod schemas.
-- **Playwright E2E:** tab navigation across all screens; full proposal lifecycle (see morning proposal → Accept → plan mutated; Override → plan untouched); post-run log flow on simulated Strava webhook; injury log → appears in Body + influences next daily proposal (mocked AI).
+- **Playwright E2E:** tab navigation across all screens; full proposal lifecycle (see morning proposal → Accept → plan mutated; Modify → edit → save → plan reflects the edited version with `modified-proposal` provenance; Override → plan untouched); post-run log flow on simulated Strava webhook; injury log → appears in Body + influences next daily proposal (mocked AI).
 - Whoop/Strava/Anthropic mocked at the integration boundary; one live smoke script per integration for manual runs.
 
 ## 13. Success criteria
@@ -140,4 +140,4 @@ Single authenticated user (Supabase Auth), but all tables still carry `user_id` 
 3. Strava runs auto-import and trigger the log flow without manual entry.
 4. Coach chat answers with the user's actual data in context and can create proposals.
 5. Pain logged in Body visibly influences the next proposal's rationale.
-6. Nothing ever changes the plan without an explicit user Accept.
+6. Nothing ever changes the plan without an explicit user decision — Accept applies the suggestion, Modify-save applies the user's edit; everything else leaves the plan untouched.
