@@ -88,7 +88,7 @@ export function TodayScreen() {
       <RingsTrio
         readiness={recovery.recoveryPct}
         readinessDelta={recovery.recoveryDelta}
-        sleepPct={recovery.sleep.efficiencyPct}
+        sleepPct={recovery.sleep.sleepScorePct}
         sleepDuration={`${Math.floor(recovery.sleep.durationMin / 60)}h ${recovery.sleep.durationMin % 60}m`}
         load={recovery.load}
         loadLabel={recovery.loadLabel}

@@ -52,6 +52,10 @@ export const proposalDriverSchema = z.object({
   label: z.string(),
   value: z.string(),
   deltaPct: z.number().optional(),
+  /** Pre-formatted delta string when it isn't a percentage (design: SLEEP "−1:32"). */
+  deltaText: z.string().optional(),
+  /** Explicit color for deltaText (design: SLEEP delta in #FF9A3D). */
+  deltaColor: z.string().optional(),
   tone: z.string().optional(),
 });
 
@@ -74,7 +78,10 @@ export type Proposal = z.infer<typeof proposalSchema>;
 export const sleepSchema = z.object({
   durationMin: z.number(),
   needMin: z.number(),
+  /** Sleep-quality efficiency stat (design: Recovery screen "EFFICIENCY 88%"). */
   efficiencyPct: z.number(),
+  /** Composite sleep score for the Today ring (design: sleep ring "78%") — distinct from efficiencyPct. */
+  sleepScorePct: z.number(),
   deepMin: z.number(),
   remMin: z.number(),
   lightMin: z.number(),

@@ -44,29 +44,41 @@ export function ModifySheet({
       <div className="w-full max-w-[414px] rounded-t-[16px] border border-white/[.05] bg-[#171c23] p-[18px] pb-[26px]">
         <div className="font-ui text-[15px] font-bold text-white">Modify session</div>
 
-        <label className="mt-[14px] block font-ui text-[10px] font-bold tracking-[.1em] text-[#8a919c]">
+        <label
+          htmlFor="modify-title"
+          className="mt-[14px] block font-ui text-[10px] font-bold tracking-[.1em] text-[#8a919c]"
+        >
           TITLE
         </label>
         <input
+          id="modify-title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           className="mt-[6px] w-full rounded-ctl border border-white/[.1] bg-transparent px-[12px] py-[10px] font-ui text-[14px] text-white outline-none"
         />
 
-        <label className="mt-[12px] block font-ui text-[10px] font-bold tracking-[.1em] text-[#8a919c]">
+        <label
+          htmlFor="modify-distance"
+          className="mt-[12px] block font-ui text-[10px] font-bold tracking-[.1em] text-[#8a919c]"
+        >
           DISTANCE (MI)
         </label>
         <input
+          id="modify-distance"
           value={distanceMi}
           onChange={(e) => setDistanceMi(e.target.value)}
           inputMode="decimal"
           className="mt-[6px] w-full rounded-ctl border border-white/[.1] bg-transparent px-[12px] py-[10px] font-ui text-[14px] text-white outline-none"
         />
 
-        <label className="mt-[12px] block font-ui text-[10px] font-bold tracking-[.1em] text-[#8a919c]">
+        <label
+          htmlFor="modify-pace"
+          className="mt-[12px] block font-ui text-[10px] font-bold tracking-[.1em] text-[#8a919c]"
+        >
           PACE TARGET
         </label>
         <input
+          id="modify-pace"
           value={paceTarget}
           onChange={(e) => setPaceTarget(e.target.value)}
           className="mt-[6px] w-full rounded-ctl border border-white/[.1] bg-transparent px-[12px] py-[10px] font-ui text-[14px] text-white outline-none"

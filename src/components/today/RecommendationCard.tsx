@@ -54,10 +54,9 @@ export function RecommendationCard({
               key={driver.label}
               className={
                 i < proposal.drivers.length - 1
-                  ? "border-r border-white/[.08] py-3 pr-3"
-                  : "py-3 pl-3"
+                  ? "border-r border-white/[.08] px-3 py-3 first:pl-0"
+                  : "px-3 py-3 last:pr-0"
               }
-              style={{ paddingLeft: i === 0 ? 0 : undefined, paddingRight: i === proposal.drivers.length - 1 ? 0 : undefined }}
             >
               <div className="font-ui text-[9px] font-bold tracking-[.13em] text-[#7b828c]">
                 {driver.label}
@@ -73,6 +72,13 @@ export function RecommendationCard({
                   >
                     {driver.deltaPct >= 0 ? "↑" : "↓"}
                     {Math.abs(driver.deltaPct)}%
+                  </span>
+                ) : driver.deltaText ? (
+                  <span
+                    className="font-num text-[10px] font-semibold"
+                    style={{ color: driver.deltaColor ?? "#7b828c" }}
+                  >
+                    {driver.deltaText}
                   </span>
                 ) : null}
               </div>
