@@ -1,5 +1,4 @@
 import { Sparkline } from "@/components/charts/Sparkline";
-import { deltaColor } from "@/lib/delta-color";
 
 function formatSignedPct(pct: number): string {
   return pct > 0 ? `↑${pct}%` : `↓${Math.abs(pct)}%`;
@@ -33,10 +32,8 @@ export function VitalsCard({
           </div>
           <div className="mt-[6px] flex items-baseline gap-[5px]">
             <span className="font-num text-[19px] tracking-[-.01em] text-white">{hrv}</span>
-            <span
-              className="font-num text-[10px] font-semibold"
-              style={{ color: deltaColor(hrvDeltaPct) }}
-            >
+            {/* V1 COMPAT: static grey (design v2 kills alarm-colored deltas); re-port in R5-R7. */}
+            <span className="font-num text-[10px] font-semibold text-[#9aa0a7]">
               {formatSignedPct(hrvDeltaPct)}
             </span>
           </div>

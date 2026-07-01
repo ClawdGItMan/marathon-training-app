@@ -11,6 +11,7 @@ import type {
   RecoverySnapshot,
   TrainingBlock,
 } from "@/lib/domain/types";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { RaceCountdown } from "@/components/today/RaceCountdown";
 import { RingsTrio } from "@/components/today/RingsTrio";
 import { RecommendationCard } from "@/components/today/RecommendationCard";
@@ -83,6 +84,7 @@ export function TodayScreen() {
 
   return (
     <div className="bg-app pb-6">
+      <PageHeader title="Today" from="today" />
       <RaceCountdown raceName={goal.name} daysOut={goal.daysOut} />
 
       <RingsTrio

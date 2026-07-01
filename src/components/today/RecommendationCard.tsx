@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Card } from "@/components/ui/Card";
-import { deltaColor } from "@/lib/delta-color";
 import { ModifySheet } from "@/components/today/ModifySheet";
 import type { Proposal } from "@/lib/domain/types";
 import type { ProposalDecision } from "@/lib/data/repo";
@@ -66,18 +65,14 @@ export function RecommendationCard({
                   {driver.value}
                 </span>
                 {driver.deltaPct !== undefined ? (
-                  <span
-                    className="font-num text-[10px] font-semibold"
-                    style={{ color: deltaColor(driver.deltaPct) }}
-                  >
+                  // V1 COMPAT: static grey (design v2 kills alarm-colored deltas); re-port in R5-R7.
+                  <span className="font-num text-[10px] font-semibold text-[#9aa0a7]">
                     {driver.deltaPct >= 0 ? "↑" : "↓"}
                     {Math.abs(driver.deltaPct)}%
                   </span>
                 ) : driver.deltaText ? (
-                  <span
-                    className="font-num text-[10px] font-semibold"
-                    style={{ color: driver.deltaColor ?? "#7b828c" }}
-                  >
+                  // V1 COMPAT: static grey (design v2 kills alarm-colored deltas); re-port in R5-R7.
+                  <span className="font-num text-[10px] font-semibold text-[#9aa0a7]">
                     {driver.deltaText}
                   </span>
                 ) : null}

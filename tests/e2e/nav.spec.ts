@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const tabs = [
-  ["TODAY", "/today"], ["PLAN", "/plan"], ["COACH", "/coach"], ["BODY", "/body"], ["PROGRESS", "/progress"],
+  ["TODAY", "/today"], ["PLAN", "/plan"], ["PROGRESS", "/progress"], ["BODY", "/body"], ["LOG", "/log"],
 ] as const;
 
 test("root redirects to /today", async ({ page }) => {
@@ -15,3 +15,9 @@ for (const [label, path] of tabs)
     await page.getByRole("link", { name: label }).click();
     await expect(page).toHaveURL(new RegExp(`${path}$`));
   });
+
+test("ASK COACH chip from /today navigates to /coach?from=today", async ({ page }) => {
+  await page.goto("/today");
+  await page.getByRole("link", { name: "ASK COACH" }).click();
+  await expect(page).toHaveURL(/\/coach\?from=today$/);
+});
