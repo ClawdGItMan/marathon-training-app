@@ -21,3 +21,16 @@ test("ASK COACH chip from /today navigates to /coach?from=today", async ({ page 
   await page.getByRole("link", { name: "ASK COACH" }).click();
   await expect(page).toHaveURL(/\/coach\?from=today$/);
 });
+
+test("tab bar nav hairline styling", async ({ page }) => {
+  await page.goto("/today");
+  const nav = page.locator("nav");
+  const borderTopWidth = await nav.evaluate(
+    (el) => window.getComputedStyle(el).borderTopWidth
+  );
+  const borderBottomWidth = await nav.evaluate(
+    (el) => window.getComputedStyle(el).borderBottomWidth
+  );
+  expect(borderTopWidth).toBe("1px");
+  expect(borderBottomWidth).toBe("0px");
+});

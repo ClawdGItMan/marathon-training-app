@@ -20,7 +20,7 @@ export function TabBar() {
   const pathname = usePathname();
 
   return (
-    <nav className="hairline flex flex-none items-center justify-around px-3 pt-3 pb-4">
+    <nav className="hairline-top flex flex-none items-center justify-around px-3 pt-3 pb-4">
       {tabs.map((tab) => {
         // startsWith so nested routes like /plan/x keep PLAN active
         const active = pathname?.startsWith(tab.href) ?? false;
