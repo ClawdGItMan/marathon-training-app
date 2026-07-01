@@ -300,7 +300,7 @@ export const seed: Seed = {
   ],
   pains: [
     {
-      id: "achilles-left",
+      id: "achilles-l",
       name: "Achilles",
       side: "Left",
       severity: 2,
@@ -309,7 +309,7 @@ export const seed: Seed = {
       trendDays: 7,
     },
     {
-      id: "right-calf",
+      id: "calf-r",
       name: "Calf",
       side: "Right",
       severity: 1,
