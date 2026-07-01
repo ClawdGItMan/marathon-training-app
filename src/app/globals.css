@@ -5,8 +5,24 @@
   --font-num: var(--font-geist);
 }
 
+@theme {
+  --color-accent: #3866e0; --color-brand: #6E8BEA; --color-warm: #E8A87C;
+  --color-easy: #7CB3D9; --color-speed: #34B3E6; --color-tempo: #FFCE3F;
+  --color-long: #16e06a; --color-strength: #9a8cf0; --color-effort: #FF8A3D; --color-streak: #FF9A3D;
+  --color-card: #171c23; --color-ink-high: #e4e7eb; --color-ink-mid: #cdd1d6;
+  --color-ink-sec: #8a919c; --color-ink-faint: #7b828c; --color-ink-dim: #697079; --color-ink-tab: #aab0b8;
+  --radius-card: 10px; --radius-ctl: 8px;
+}
+
 .bg-app {
   background: radial-gradient(130% 70% at 50% -8%, #1c232c 0%, #11151b 56%);
+}
+
+.card {
+  background: #171c23;
+  border: 1px solid rgba(255, 255, 255, .05);
+  border-radius: 10px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .03) inset, 0 10px 26px -16px rgba(0, 0, 0, .55);
 }
 
 body {
