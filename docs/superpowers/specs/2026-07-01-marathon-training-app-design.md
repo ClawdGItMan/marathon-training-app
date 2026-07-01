@@ -21,24 +21,22 @@ Core capabilities:
 6. **Progress** analytics: mileage, race predictions vs. goal (sub-4:00), fitness trend.
 7. Static **AI-generated exercise illustrations** for strength movements.
 
-## 2. Design source of truth
+## 2. Design source of truth (REVISED 2026-07-01 — "Instrument" design v2)
 
-- `Daily Screen Directions.dc.html` + `README.md` (repo root) are **canonical** for all visual design: exact colors, tokens, spacing, copy, and per-screen layouts. Screens are referenced by their stable ids: `#2a` Daily/Today, `#3a` Progress, `#3b` Recovery, `#3c` Plan, `#3d` Log, `#3e` Strength, `#5a` Workout Detail.
-- `prototype.html` (repo root) is the **approved navigation model**: the same screens stitched together with the final 5-tab bar, the new Coach screen, the Body-tab injury manager, and the synchronized chart-reveal animation. It was reviewed and approved by the user.
-- **Reuse rule:** implement screens exactly as designed. New UI (Coach screen, injury manager, imagery slots) must be assembled from the existing token/card system (fonts Archivo + Geist, card surface `#171c23`, 10px/8px radii, accent `#3866e0`, Coach-surface accents `#6E8BEA`/`#E8A87C`, session-type colors, `deltaColor(pct)` scale). No new design language.
+- **Canonical:** `design-v2/Daily Screen Directions.dc.html` + `design-v2/README.md` — the "Instrument" design system, delivered by the user mid-build and superseding the original bundle. Final screens: **`#7a` Plan, `#7b` Progress, `#7c` Recovery (Body tab), `#7d` Log, `#7e` Strength, `#7f` Coach, `#6a` Workout Detail** (anchors at HTML lines 67/152/238/317/383/466/562). All other turns in that file, the repo-root original design bundle, and `prototype.html` are **superseded history** — do not port from them except where this spec explicitly carries a feature forward.
+- **Instrument visual language (binding):** flat `#0B0C0E` background everywhere; **no cards** — hairline rules `rgba(255,255,255,.09)` separate ruled sections; two bordered-box exceptions (plain hairline box, and the **corner-tick box** with a 14×14px lime bracket overlapping top-left, used for coach notes/proposals); **one signal color, lime `#C9F53F`** meaning "now / act" (today, active tab underline, current week, live endpoints, primary CTAs, coach labels) — never decorative; text greys `#fff → #e8eaec → #c3c8ce → #9aa0a7 → #8a919c → #6f757d → #5c6168 → #3f444b`; chart greys `#242930/#2d333b/#363d46`, lines `#565b62`, empty segments `#22262c`; radius **2px** on everything; fonts **Space Grotesk 500** (display), **Geist Mono 500** (uppercase micro-labels, .10–.20em tracking, nowrap), **Geist** (body + tabular numerals). **No colored tags/chips, no icons in the tab bar, no alarm colors on deltas** (vitals deltas grey; prediction deltas lime). Motion: one-shot on mount (line draw-in ~1.3s, bar rise .55s staggered, ring sweep 1.2s, meter stagger, 3.2s lime pulse on live dots).
+- **Reuse rule (unchanged in spirit):** implement the seven final screens exactly as designed. The two carried features that have no Instrument mock — the **Today screen** and the **Body-tab pain/injury manager** — are composed strictly from Instrument's existing patterns (section header rows, ruled rows, corner-tick box, segment meters, thin ring) with no new design language.
 
 ## 3. Information architecture
 
-**Five tabs:** `TODAY (#2a) · PLAN (#3c) · COACH (new) · BODY (#3b) · PROGRESS (#3a)`
+**Five tabs (Instrument, text-only, lime underline active):** `TODAY (composed) · PLAN (#7a) · PROGRESS (#7b) · BODY (#7c + pain manager) · LOG (#7d)`
 
-Deltas from the original mock's tab bar (approved):
-- **Progress replaces LOG** in the bar (rising trend-line icon).
-- **Coach uses a stopwatch icon**, accent-tinted, center position.
-- **Log is an action, not a destination.** The `#3d` Log screen is retained as a flow, not a tab:
-  - Run logging (auto-import summary, RPE, post-run pain check) fires automatically when a Strava activity syncs, and is reachable from Today ("＋ Log") and Plan/session flows.
-  - Injury/pain **management** (ongoing areas, severity history) lives in **Body**.
-- Non-tab screens: **Workout Detail `#5a`** opens by tapping any session (Today, Plan). **Strength `#3e`** is the STRENGTH mode of Plan's RUN/STRENGTH toggle.
-- **Settings** (minimal, no new design language): opened from the profile avatar in Today's top-left (already in the `#2a` design). Contains Whoop/Strava connection status + OAuth connect/re-auth (this is also where first-run connection happens), race/goal details, and home timezone. A simple card list in the existing token system.
+IA facts of design v2 (supersede the earlier tab decisions):
+- **Coach is not a tab.** Every page header carries the lime **ASK COACH** chip (spark glyph + Geist Mono label, glow shadow) → pushes the Coach screen `#7f`, seeded with that page's context. This realizes the approved "Ambient Coach" model more fully than the old center tab; the old stopwatch-icon decision dies with the icon-less tab bar.
+- **Log is a tab again** (`#7d`): Strava auto-import summary, RPE segment meter, pain chips (ACHILLES·L / ACHILLES·R / OTHER / NONE) + severity segments, SAVE LOG lime CTA. Post-run logging still auto-fires on Strava sync (Phase 2).
+- **Today has no v2 mock** — it is composed from Instrument patterns: readiness section (thin ring + 62/READY + guidance, borrowing `#7c`'s hero), today's-session ruled row (lime TODAY dot, links to Workout Detail), the daily proposal in a **corner-tick box** with mono ACCEPT / MODIFY / OVERRIDE actions + drivers line, compact THIS WEEK and PREDICTED lines.
+- **Pain/injury manager stays on Body** (carried user feature, no v2 mock): an Instrument-styled PAIN & INJURIES ruled section under RECOVERY · 7 DAYS — per-area ruled rows (severity segments, trend mono), body-map figure restyled to greys + lime hotspots, "+ LOG SORENESS OR INJURY" → `/log?focus=pain`.
+- Non-tab screens: **Workout Detail `#6a`** (from Plan day rows / Today's session), **Strength `#7e`** (Plan's STRENGTH underline tab), **Coach `#7f`** (from ASK COACH chips), **Settings** (minimal Instrument ruled list; reachable from Today header; holds OAuth connections, race/goal, home timezone).
 
 ## 4. Screens — reuse + deltas
 
@@ -104,7 +102,7 @@ Single authenticated user (Supabase Auth), but all tables still carry `user_id` 
 
 - **Style (locked, sample approved):** static flat-vector athlete illustration, dark ground (`#11151b`), slate-grey body, **working muscles tinted `#6E8BEA`**, minimal geometric shading, no text/logos, square.
 - **Production:** generated manually by the user in ChatGPT (his subscription — zero API cost), using a locked style prompt where only the exercise + highlighted muscle change, and **feeding the approved reference image back in** for figure/framing consistency. ~40–60 core movements generated once.
-- **In-app:** assets stored in Supabase Storage, keyed by exercise slug; thumbnail in `#3e` rows, full image on exercise detail. Unknown/novel movements fall back to a generic illustration (no runtime generation in v1; API-based on-demand generation is an explicit future option).
+- **In-app (revised for Instrument):** the `#7e` strength list is deliberately imagery-free (ruled checklist rows — no thumbnails). Illustrations surface on the **exercise detail** view opened by tapping a strength row (Instrument-styled: ruled section with the illustration on the flat `#0B0C0E` ground, name, sets×reps, cue). Assets stored in Supabase Storage keyed by exercise slug; generic fallback for unknown movements; no runtime generation in v1. The user's dark-ground illustration style translates to the new system unchanged (its background is already near-black); regenerate accent-tint from `#6E8BEA` to lime only if the user chooses — existing assets remain acceptable.
 
 ## 9. Platform & stack
 
