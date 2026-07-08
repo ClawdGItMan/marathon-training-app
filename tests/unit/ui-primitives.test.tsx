@@ -153,10 +153,10 @@ test("SegmentMeter defaults to 26px segments when height is omitted", () => {
 });
 
 test("SegmentMeter renders thin segments for a custom height (Log SEVERITY, design #7d)", () => {
-  const { container } = render(<SegmentMeter value={2} height={8} color="#fff" />);
+  const { container } = render(<SegmentMeter value={2} height={8} color="#e8eaec" />);
   const seg = container.querySelector("[data-filled=true]") as HTMLElement;
   expect(seg.style.height).toBe("8px");
-  expect(seg.style.backgroundColor).toBe("rgb(255, 255, 255)");
+  expect(seg.style.backgroundColor).toBe("rgb(232, 234, 236)");
 });
 
 test("SegmentMeter is read-only (spans) when no onChange is given", () => {

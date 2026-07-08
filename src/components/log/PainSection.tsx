@@ -73,7 +73,7 @@ export function PainSection({
               value={severity}
               onChange={onSeverityChange}
               height={8}
-              color="#fff"
+              color="#e8eaec"
               ariaLabel="Severity"
             />
           </Section>
