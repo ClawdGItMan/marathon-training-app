@@ -57,6 +57,7 @@ export function PlanScreen() {
     <div className="pb-6">
       <PageHeader title="Plan" sub={formatBlockSub(block)} from="plan" />
 
+      {/* Per design-v2 #7a/#7e: padding-top 20px, letter-spacing .16em */}
       <UnderlineTabs options={PLAN_TABS} value={tab} onChange={setTab} />
 
       {tab === "RUN" ? (

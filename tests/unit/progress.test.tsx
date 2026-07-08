@@ -42,3 +42,19 @@ test("3M range is selected by default and 1M toggle re-scopes the chart to 4 poi
   const pointCount = polyline!.getAttribute("points")!.trim().split(/\s+/).length;
   expect(pointCount).toBe(4);
 });
+
+test("Progress RangeTabs match design-v2 #7b spec: pt-18px, tracking-.14em", async () => {
+  render(<ProgressScreen />);
+
+  await screen.findByText("Honolulu Marathon");
+
+  // RangeTabs container: pt-[18px]
+  const tabContainer = screen.getByText("1W").parentElement;
+  expect(tabContainer).toHaveClass("pt-[18px]");
+
+  // Each tab button: tracking-[.14em]
+  expect(screen.getByText("1W")).toHaveClass("tracking-[.14em]");
+  expect(screen.getByText("1M")).toHaveClass("tracking-[.14em]");
+  expect(screen.getByText("3M")).toHaveClass("tracking-[.14em]");
+  expect(screen.getByText("1Y")).toHaveClass("tracking-[.14em]");
+});

@@ -81,3 +81,17 @@ test("tapping an exercise opens the detail sheet with a generic fallback illustr
   fireEvent.click(screen.getByText("CLOSE"));
   expect(screen.queryByText("CLOSE")).not.toBeInTheDocument();
 });
+
+test("Plan RUN/STRENGTH tabs match design-v2 #7a/#7e spec: pt-20px, tracking-.16em", async () => {
+  render(<PlanScreen />);
+
+  await screen.findByText("Plan");
+
+  // PlanTabs container: pt-[20px]
+  const tabContainer = screen.getByText("RUN").parentElement;
+  expect(tabContainer).toHaveClass("pt-[20px]");
+
+  // Each tab button: tracking-[.16em]
+  expect(screen.getByText("RUN")).toHaveClass("tracking-[.16em]");
+  expect(screen.getByText("STRENGTH")).toHaveClass("tracking-[.16em]");
+});
