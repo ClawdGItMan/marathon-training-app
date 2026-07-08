@@ -38,7 +38,7 @@ test("Coach renders header, seeded transcript (#7f copy), and the PROPOSED SWAP 
   expect(screen.getAllByText(/COACH/).length).toBeGreaterThan(0);
 
   expect(screen.getByText("PROPOSED SWAP")).toBeInTheDocument();
-  expect(screen.getByText("Try 5 × 600m instead")).toBeInTheDocument();
+  expect(screen.getByText("5 × 600m at 10K pace")).toBeInTheDocument();
   expect(screen.getByText("Same time in Zone 5, fewer hard accelerations.")).toBeInTheDocument();
   expect(screen.getByText("~44 MIN")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "ACCEPT" })).toBeInTheDocument();

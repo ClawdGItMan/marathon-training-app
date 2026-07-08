@@ -72,6 +72,7 @@ export const proposalSchema = z.object({
   drivers: z.array(proposalDriverSchema),
   status: z.enum(["proposed", "accepted", "modified", "dismissed", "expired"]),
   reviewedAt: z.string(),
+  chatHeadline: z.string().optional(),
 });
 export type Proposal = z.infer<typeof proposalSchema>;
 

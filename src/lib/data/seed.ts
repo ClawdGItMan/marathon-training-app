@@ -292,6 +292,7 @@ export const seed: Seed = {
       subhead: "Same time in Zone 5, fewer hard accelerations.",
       rationale:
         "Same time in Zone 5 with fewer hard transitions — easier on turnover at nearly the same total time.",
+      chatHeadline: "5 × 600m at 10K pace",
       badge: "ADJUST",
       before: wed400s,
       after: wed600sAfter,

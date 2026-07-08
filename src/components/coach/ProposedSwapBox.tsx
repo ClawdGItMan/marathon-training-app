@@ -24,7 +24,7 @@ export function ProposedSwapBox({
 
   return (
     <CornerTickBox label="PROPOSED SWAP" context={time?.toUpperCase()}>
-      <div className="mt-2 font-display text-[15px] text-white">{proposal.headline}</div>
+      <div className="mt-2 font-display text-[15px] text-white">{proposal.chatHeadline ?? proposal.headline}</div>
       <p className="mt-1 font-num text-[11px] leading-[1.55] text-[#6f757d]">{proposal.subhead}</p>
       <div className="mt-3 flex items-center gap-[18px]">
         <button
