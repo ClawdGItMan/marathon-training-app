@@ -24,10 +24,11 @@ test("Plan screen (RUN tab) shows block header, periodization chart, and this-we
   expect(await screen.findByText("Rolling 400s")).toBeInTheDocument();
   expect(screen.getByText("TODAY")).toBeInTheDocument();
 
-  // Today's row links to the workout detail route (route lands in R9).
+  // Today's row links to the workout detail route, carrying ?from=plan for
+  // the back header (R9).
   expect(screen.getByText("Rolling 400s").closest("a")).toHaveAttribute(
     "href",
-    "/workout/wed-400s"
+    "/workout/wed-400s?from=plan"
   );
 });
 

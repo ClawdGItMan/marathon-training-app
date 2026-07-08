@@ -16,6 +16,13 @@ const tabs: Tab[] = [
   { label: "LOG", href: "/log" },
 ];
 
+// /workout/[id] has no tab of its own (R9) — it's reached from Plan (and
+// Today), so it keeps PLAN active in the tab bar rather than forking TabBar
+// per route.
+const EXTRA_ACTIVE_PREFIXES: Record<string, string[]> = {
+  "/plan": ["/workout"],
+};
+
 export function TabBar() {
   const pathname = usePathname();
 
@@ -23,7 +30,9 @@ export function TabBar() {
     <nav className="hairline-top flex flex-none items-center justify-around px-3 pt-3 pb-4">
       {tabs.map((tab) => {
         // startsWith so nested routes like /plan/x keep PLAN active
-        const active = pathname?.startsWith(tab.href) ?? false;
+        const active =
+          (pathname?.startsWith(tab.href) ?? false) ||
+          (EXTRA_ACTIVE_PREFIXES[tab.href]?.some((prefix) => pathname?.startsWith(prefix)) ?? false);
 
         return (
           <Link

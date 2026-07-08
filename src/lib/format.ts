@@ -50,3 +50,12 @@ export function formatWeekDayLabel(iso: string): { weekday: string; day: string 
   const day = String(date.getDate()).padStart(2, "0");
   return { weekday, day };
 }
+/** {week:7, totalWeeks:16} → "WK 07/16" (Workout Detail header context, design #6a). */
+export function formatWeekOf(block: { week: number; totalWeeks: number }): string {
+  return `WK ${String(block.week).padStart(2, "0")}/${block.totalWeeks}`;
+}
+/** "Intervals · 4.5 mi · ~45 min" → "~45" (Workout Detail hero TIME stat, design #6a). */
+export function parseEstMinutes(detail: string): string {
+  const match = detail.match(/~(\d+)\s*min/);
+  return match ? `~${match[1]}` : "";
+}

@@ -40,6 +40,14 @@ test("deciding a later proposal that targets the same session applies it", async
   expect(s.provenance).toBe("accepted-proposal");
 });
 
+test("startSession marks the session in-progress", async () => {
+  const before = await localRepo.getSession("wed-400s");
+  expect(before.status).toBe("planned");
+  await localRepo.startSession("wed-400s");
+  const after = await localRepo.getSession("wed-400s");
+  expect(after.status).toBe("in-progress");
+});
+
 test("pain log updates area severity", async () => {
   await localRepo.logPain("achilles-l", 3);
   expect((await localRepo.getPains()).find((a) => a.id === "achilles-l")!.severity).toBe(3);

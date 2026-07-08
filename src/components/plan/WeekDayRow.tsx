@@ -8,9 +8,9 @@ import type { PlannedSession } from "@/lib/domain/types";
  * Plan's THIS WEEK ruled day row (design-v2 #7a): mono weekday+date label
  * (lime for today), Space Grotesk title, quiet detail line, and either a
  * mono TypeTag or the pulsing TODAY marker on the right. Links to the
- * per-day workout detail (route lands in R9 — 404 until then is expected).
- * `hairline` follows the Section convention (SessionRows/GlanceLines): the
- * last row omits its own rule and lets the wrapping Section supply it.
+ * per-day workout detail. `hairline` follows the Section convention
+ * (SessionRows/GlanceLines): the last row omits its own rule and lets the
+ * wrapping Section supply it.
  */
 export function WeekDayRow({
   session,
@@ -26,7 +26,7 @@ export function WeekDayRow({
 
   return (
     <Link
-      href={`/workout/${session.id}`}
+      href={`/workout/${session.id}?from=plan`}
       className={`flex items-center gap-[13px] py-[13px] ${hairline ? "hairline" : ""}`}
     >
       <span

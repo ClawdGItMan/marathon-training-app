@@ -41,6 +41,8 @@ export interface Repo {
   getRecovery7d(): Promise<RecoverySnapshot[]>;
   getWeekSessions(): Promise<PlannedSession[]>;
   getSession(id: string): Promise<PlannedSession>;
+  /** Marks a session in-progress (Workout Detail's START WORKOUT CTA, design #6a). */
+  startSession(id: string): Promise<void>;
   getOpenProposals(): Promise<Proposal[]>;
   decideProposal(
     id: string,

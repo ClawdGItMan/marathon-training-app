@@ -1,13 +1,27 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Plan screen", () => {
-  test("today's row links to the workout detail route (route lands in R9)", async ({ page }) => {
+  test("today's row links to the workout detail route with ?from=plan", async ({ page }) => {
     await page.goto("/plan");
 
     await expect(page.getByText("16-WEEK BLOCK")).toBeVisible();
     const link = page.getByRole("link", { name: /Rolling 400s/ });
-    // Only assert the href — the destination route 404s until R9.
-    await expect(link).toHaveAttribute("href", "/workout/wed-400s");
+    await expect(link).toHaveAttribute("href", "/workout/wed-400s?from=plan");
+  });
+
+  test("tapping a day row navigates to the Workout Detail screen with PLAN active", async ({
+    page,
+  }) => {
+    await page.goto("/plan");
+
+    await page.getByRole("link", { name: /Rolling 400s/ }).click();
+    await expect(page).toHaveURL(/\/workout\/wed-400s\?from=plan$/);
+    await expect(page.getByText("Rolling 400s")).toBeVisible();
+    await expect(page.getByText("BREAKDOWN")).toBeVisible();
+
+    // PLAN keeps its lime underline even though /workout has no tab of its own.
+    const planTab = page.getByRole("link", { name: "PLAN", exact: true });
+    await expect(planTab).toHaveClass(/border-sig/);
   });
 
   test("STRENGTH tab shows the checklist and toggles a ring independently of the detail sheet", async ({

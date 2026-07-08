@@ -17,7 +17,7 @@ export function SessionRows({
   planned: PlannedSession;
   proposed?: PlannedSession;
 }) {
-  const href = `/workout/${planned.id}`;
+  const href = `/workout/${planned.id}?from=today`;
 
   if (proposed) {
     return (

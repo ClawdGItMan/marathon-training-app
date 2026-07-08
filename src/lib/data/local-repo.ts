@@ -171,6 +171,12 @@ async function getSession(id: string): Promise<PlannedSession> {
   return resolveSession(base, overlay);
 }
 
+async function startSession(id: string): Promise<void> {
+  withOverlay((overlay) => {
+    overlay.sessionStatusChanges[id] = "in-progress";
+  });
+}
+
 async function getOpenProposals(): Promise<Proposal[]> {
   const overlay = readOverlay();
   return resolveOpenProposals(overlay);
@@ -244,6 +250,7 @@ export const localRepo: Repo = {
   getRecovery7d,
   getWeekSessions,
   getSession,
+  startSession,
   getOpenProposals,
   decideProposal,
   getPains,
