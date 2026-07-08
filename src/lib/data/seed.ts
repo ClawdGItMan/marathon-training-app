@@ -289,7 +289,7 @@ export const seed: Seed = {
       headline: "Try 5 × 600m instead",
       subhead: "Same aerobic stimulus with fewer hard transitions.",
       rationale:
-        "Same aerobic stimulus with fewer hard transitions — a touch easier on turnover at nearly the same total time.",
+        "Same time in Zone 5 with fewer hard transitions — easier on turnover at nearly the same total time.",
       badge: "ADJUST",
       before: wed400s,
       after: wed600sAfter,

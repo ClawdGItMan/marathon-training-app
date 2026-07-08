@@ -52,3 +52,36 @@ test("pain log updates area severity", async () => {
   await localRepo.logPain("achilles-l", 3);
   expect((await localRepo.getPains()).find((a) => a.id === "achilles-l")!.severity).toBe(3);
 });
+
+test("deciding a workout-scope proposal leaves day-scope proposal undecided", async () => {
+  const proposals = await localRepo.getOpenProposals();
+  const dayP = proposals.find((p) => p.id === "proposal-1")!;
+  const workoutP = proposals.find((p) => p.id === "proposal-3")!;
+  expect(dayP.scope).toBe("day");
+  expect(workoutP.scope).toBe("workout");
+  expect(dayP.targetSessionId).toBe("wed-400s");
+  expect(workoutP.targetSessionId).toBe("wed-400s");
+  // Decide the workout proposal
+  await localRepo.decideProposal(workoutP.id, "accepted");
+  // day proposal should still be proposed (undecided)
+  const remainingProposals = await localRepo.getOpenProposals();
+  expect(remainingProposals.find((p) => p.id === "proposal-1")!.status).toBe("proposed");
+});
+
+test("dismissing a workout-scope proposal leaves day-scope proposal undecided and session unmutated", async () => {
+  const proposals = await localRepo.getOpenProposals();
+  const dayP = proposals.find((p) => p.id === "proposal-1")!;
+  const workoutP = proposals.find((p) => p.id === "proposal-3")!;
+  const sessionBefore = await localRepo.getSession("wed-400s");
+  expect(sessionBefore.title).toBe("Rolling 400s");
+  expect(sessionBefore.provenance).toBe("original");
+  // Dismiss the workout proposal
+  await localRepo.decideProposal(workoutP.id, "dismissed");
+  // day proposal should still be proposed (undecided)
+  const remainingProposals = await localRepo.getOpenProposals();
+  expect(remainingProposals.find((p) => p.id === "proposal-1")!.status).toBe("proposed");
+  // session should be unchanged
+  const sessionAfter = await localRepo.getSession("wed-400s");
+  expect(sessionAfter.title).toBe("Rolling 400s");
+  expect(sessionAfter.provenance).toBe("original");
+});
