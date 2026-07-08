@@ -1,15 +1,6 @@
 import Link from "next/link";
+import { LiveDot } from "@/components/ui/LiveDot";
 import type { PlannedSession } from "@/lib/domain/types";
-
-function LiveDot() {
-  return (
-    <span
-      data-anim
-      className="h-[5px] w-[5px] rounded-full bg-sig"
-      style={{ animation: "limePulse 3.2s ease-in-out infinite" }}
-    />
-  );
-}
 
 /**
  * Today's session as Instrument ruled rows (week-row pattern from design-v2

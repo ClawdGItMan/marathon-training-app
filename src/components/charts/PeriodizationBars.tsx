@@ -1,9 +1,7 @@
-export type PeriodizationPhase = "base" | "build" | "peak" | "taper";
+import type { PeriodizationWeek } from "@/lib/domain/types";
 
-export type PeriodizationWeek = {
-  phase: PeriodizationPhase;
-  mi: number;
-};
+export type { PeriodizationWeek };
+export type PeriodizationPhase = PeriodizationWeek["phase"];
 
 // Phase greys per design #7a (16-WEEK BLOCK): volume reads through height,
 // phase through grey step; only the current week carries signal lime.

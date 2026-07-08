@@ -34,3 +34,19 @@ export function recoveryBand(pct: number): string {
   if (pct >= 60) return "MODERATE";
   return "LOW";
 }
+/** block {2, BUILD, 7, 16} → "BLOCK 2 · BUILD · WK 07/16" (Plan header sub, design #7a). */
+export function formatBlockSub(block: {
+  number: number;
+  phase: string;
+  week: number;
+  totalWeeks: number;
+}): string {
+  return `BLOCK ${block.number} · ${block.phase} · WK ${String(block.week).padStart(2, "0")}/${block.totalWeeks}`;
+}
+/** "2026-06-29" → { weekday: "MON", day: "29" } (Plan week-row label, design #7a). */
+export function formatWeekDayLabel(iso: string): { weekday: string; day: string } {
+  const date = new Date(`${iso}T00:00:00`);
+  const weekday = date.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+  const day = String(date.getDate()).padStart(2, "0");
+  return { weekday, day };
+}

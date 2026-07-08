@@ -15,6 +15,8 @@ export type ProposalDecision = "accepted" | "modified" | "dismissed";
 export type StrengthSession = {
   phase: string;
   note: string;
+  phaseIndex: number;
+  coachNote: string;
   session: StrengthExercise[];
 };
 

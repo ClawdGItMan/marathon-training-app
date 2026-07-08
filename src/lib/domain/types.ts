@@ -12,4 +12,5 @@ export type {
   ChatMessage,
   Activity,
   Seed,
+  PeriodizationWeek,
 } from "./schemas";

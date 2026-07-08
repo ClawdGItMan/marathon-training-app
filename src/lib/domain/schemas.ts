@@ -133,6 +133,12 @@ export const strengthExerciseSchema = z.object({
 });
 export type StrengthExercise = z.infer<typeof strengthExerciseSchema>;
 
+export const periodizationWeekSchema = z.object({
+  phase: z.enum(["base", "build", "peak", "taper"]),
+  mi: z.number(),
+});
+export type PeriodizationWeek = z.infer<typeof periodizationWeekSchema>;
+
 export const trainingBlockSchema = z.object({
   number: z.number(),
   phase: z.string(),
@@ -185,6 +191,10 @@ export const seedSchema = z.object({
   strength: z.object({
     phase: z.string(),
     note: z.string(),
+    /** Index into the 5-stage phase tracker (ADAPT/HYPER/MAX/POWER/MAINT), design #7e. */
+    phaseIndex: z.number(),
+    /** Corner-tick COACH note under the checklist, design #7e. */
+    coachNote: z.string(),
     session: z.array(strengthExerciseSchema),
   }),
   workoutDetail: sessionSchema,
@@ -192,5 +202,7 @@ export const seedSchema = z.object({
   mileage12wk: z.array(z.number()),
   fitness90d: z.array(z.number()),
   activities: z.array(activitySchema),
+  /** 16-week block chart data (design #7a "16-WEEK BLOCK"), 4 weeks per phase. */
+  periodization: z.array(periodizationWeekSchema),
 });
 export type Seed = z.infer<typeof seedSchema>;

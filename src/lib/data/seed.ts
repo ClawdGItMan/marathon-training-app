@@ -330,7 +330,10 @@ export const seed: Seed = {
   ],
   strength: {
     phase: "MAX STRENGTH · DELOAD",
-    note: "Volume −20% to match easy running",
+    note: "Volume −20% to match easy running.",
+    // MAX is index 2 of the 5-stage tracker: ADAPT, HYPER, MAX, POWER, MAINT (#7e).
+    phaseIndex: 2,
+    coachNote: "Keep the calf raises slow — skip them if morning stiffness is above 3.",
     session: [
       {
         id: "eccentric-calf-raise",
@@ -339,7 +342,7 @@ export const seed: Seed = {
         sets: 3,
         reps: "12",
         tag: "ACHILLES",
-        cue: "Slow 3s lowers · single leg",
+        cue: "Slow 3s lower · straight knee",
         muscles: ["gastrocnemius", "soleus", "achilles-tendon"],
       },
       {
@@ -348,7 +351,7 @@ export const seed: Seed = {
         name: "Back squat",
         sets: 3,
         reps: "5",
-        cue: "@ 70% · controlled",
+        cue: "Heavy · 185 lb",
         muscles: ["quadriceps", "glutes", "core"],
       },
       {
@@ -357,7 +360,7 @@ export const seed: Seed = {
         name: "Romanian deadlift",
         sets: 3,
         reps: "8",
-        cue: "Hamstring & posterior chain",
+        cue: "Controlled tempo",
         muscles: ["hamstrings", "glutes", "lower-back"],
       },
       {
@@ -366,16 +369,16 @@ export const seed: Seed = {
         name: "Single-leg press",
         sets: 3,
         reps: "10",
-        cue: "Balance L / R loading",
+        cue: "Each side",
         muscles: ["quadriceps", "glutes", "hamstrings"],
       },
       {
         id: "side-plank",
         slug: "side-plank",
-        name: "Core · side plank",
+        name: "Side plank",
         sets: 3,
         reps: "45s",
-        cue: "Anti-rotation hold",
+        cue: "Each side",
         muscles: ["obliques", "core", "shoulders"],
       },
     ],
@@ -401,6 +404,26 @@ export const seed: Seed = {
   ],
   mileage12wk: [22, 24, 21, 26, 29, 27, 31, 28, 34, 32, 37, 32],
   fitness90d: [58, 61, 60, 65, 63, 68, 67, 71, 70, 74, 73, 78, 81],
+  // 16-WEEK BLOCK bar heights per design-v2 #7a (4 weeks per phase; week 7
+  // — index 6, BUILD — is block.week and renders lime as the current week).
+  periodization: [
+    { phase: "base", mi: 30 },
+    { phase: "base", mi: 33 },
+    { phase: "base", mi: 36 },
+    { phase: "base", mi: 38 },
+    { phase: "build", mi: 40 },
+    { phase: "build", mi: 43 },
+    { phase: "build", mi: 46 },
+    { phase: "build", mi: 44 },
+    { phase: "peak", mi: 48 },
+    { phase: "peak", mi: 50 },
+    { phase: "peak", mi: 52 },
+    { phase: "peak", mi: 49 },
+    { phase: "taper", mi: 44 },
+    { phase: "taper", mi: 38 },
+    { phase: "taper", mi: 32 },
+    { phase: "taper", mi: 26 },
+  ],
   activities: [
     {
       id: "act-1",
