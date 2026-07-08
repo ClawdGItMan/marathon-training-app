@@ -39,4 +39,34 @@ test.describe("Today screen — recommendation decisions", () => {
     await expect(original).not.toHaveClass(/line-through/);
     await expect(page.getByText("PROPOSED", { exact: true })).toHaveCount(0);
   });
+
+  // Spec §12: "Modify → edit → save → plan reflects the edited version with
+  // modified-proposal provenance" — the one spec-mandated E2E flow that had
+  // no Playwright coverage (unit-tested at ModifySheet/repo level only).
+  test("Modify flow: sheet edit + save mutates the plan with modified-proposal provenance", async ({
+    page,
+  }) => {
+    await page.goto("/today");
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+
+    await page.getByRole("button", { name: "MODIFY" }).click();
+
+    await expect(page.getByText("MODIFY SESSION")).toBeVisible();
+    await page.getByLabel("TITLE").fill("Easy shakeout");
+    await page.getByLabel("DISTANCE (MI)").fill("3");
+    await page.getByRole("button", { name: "SAVE" }).click();
+
+    // Sheet closes; the edited session is the single active row — the repo
+    // now stores it with `modified-proposal` provenance (not the untouched
+    // proposal.after), so it's the edited title/distance that shows.
+    await expect(page.getByText("MODIFY SESSION")).toHaveCount(0);
+    await expect(page.getByText("Easy shakeout")).toBeVisible();
+    await expect(page.getByText("Rolling 400s")).toHaveCount(0);
+    await expect(page.getByText("PROPOSED", { exact: true })).toHaveCount(0);
+
+    // Persists across reload — repo-visible outcome, not just UI state.
+    await page.reload();
+    await expect(page.getByText("Easy shakeout")).toBeVisible();
+  });
 });
