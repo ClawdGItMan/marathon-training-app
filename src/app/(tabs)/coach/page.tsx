@@ -1,7 +1,11 @@
-export default function CoachPage() {
-  return (
-    <div className="p-4">
-      <h1 className="text-[22px] font-bold">COACH</h1>
-    </div>
-  );
+import { CoachScreen } from "@/components/coach/CoachScreen";
+
+export default async function CoachPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string }>;
+}) {
+  const { from } = await searchParams;
+
+  return <CoachScreen from={from} />;
 }

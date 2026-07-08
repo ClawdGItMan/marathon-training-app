@@ -287,7 +287,9 @@ export const seed: Seed = {
       scope: "workout",
       targetSessionId: "wed-400s",
       headline: "Try 5 × 600m instead",
-      subhead: "Same aerobic stimulus with fewer hard transitions.",
+      // Reconciled with design-v2 #7f's PROPOSED SWAP box copy (line ~503) per
+      // the R9 review — R11 task brief.
+      subhead: "Same time in Zone 5, fewer hard accelerations.",
       rationale:
         "Same time in Zone 5 with fewer hard transitions — easier on turnover at nearly the same total time.",
       badge: "ADJUST",
@@ -384,22 +386,26 @@ export const seed: Seed = {
     ],
   },
   workoutDetail: wed400s,
+  // Verbatim from design-v2 #7f (lines 486-509) per the R11 task brief — the
+  // seeded transcript copy is the canonical source, not a paraphrase.
   coachThread: [
     {
       id: "msg-1",
       role: "coach",
-      text: "Morning. Readiness is down nine points and your Achilles flagged mild yesterday, so I'm proposing an easy day instead of the 400s — and I've also lined up a Saturday move for the long run in case Sunday's rain holds.",
-      proposalRefs: ["proposal-1", "proposal-2"],
+      time: "11:01",
+      text: "Recovery is at 62 — a bit below baseline. Rolling 400s still fit today, just keep the 200m floats truly easy.",
     },
     {
       id: "msg-2",
       role: "user",
-      text: "What should I eat before the long run this weekend?",
+      text: "My calves are tight from Monday. Should I still do the 400s?",
     },
     {
       id: "msg-3",
       role: "coach",
-      text: "Aim for 2–3g of carbs per kg of bodyweight 3 hours out, then a light 30g-carb snack about 30–45 minutes before you start. During the run, take in 30–60g of carbs per hour once you're past 60–75 minutes.",
+      time: "11:02",
+      text: "Then let's trade turnover for volume — same stimulus, gentler on the calves:",
+      proposalRefs: ["proposal-3"],
     },
   ],
   mileage12wk: [22, 24, 21, 26, 29, 27, 31, 28, 34, 32, 37, 32],

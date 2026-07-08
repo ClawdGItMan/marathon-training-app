@@ -165,6 +165,10 @@ export const chatMessageSchema = z.object({
   role: z.enum(["coach", "user"]),
   text: z.string(),
   proposalRefs: z.array(z.string()).optional(),
+  /** "11:01" style clock label (design #7f "COACH · 11:01"). Coach-role only
+   * — "YOU" rows never show a time in the mock. Optional so older/omitted
+   * entries just render the bare role label. */
+  time: z.string().optional(),
 });
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
