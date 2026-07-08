@@ -7,6 +7,7 @@ import {
   parseEstMinutes,
   formatActivityTitle,
   formatMinSec,
+  formatRaceDateLong,
 } from "@/lib/format";
 
 test("formatPace", () => expect(formatPace(541)).toBe("9:01"));
@@ -31,4 +32,8 @@ test("formatActivityTitle strips the redundant distance suffix (Log imported-run
 test("formatMinSec renders plain m:ss with no hour segment (Log TIME stat, design #7d)", () => {
   expect(formatMinSec(2304)).toBe("38:24");
   expect(formatMinSec(65)).toBe("1:05");
+});
+
+test("formatRaceDateLong renders an uppercase-month race date (Settings RACE line, R12)", () => {
+  expect(formatRaceDateLong("2026-12-13")).toBe("DEC 13 2026");
 });

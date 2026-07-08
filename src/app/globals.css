@@ -59,25 +59,6 @@
   }
 }
 
-/* V1 COMPAT — remove in R5-R7
- * v1 screens (Today/Progress/Body) still reference these deleted v1 tokens/classes
- * directly via Tailwind utilities (text-accent, bg-accent, rounded-card, rounded-ctl,
- * text-ink-sec/faint/high, font-ui, bg-app). Re-port those screens in R5-R7 and delete
- * this block once no source file references it (grep confirms usage before removing).
- */
-@theme {
-  --font-ui: var(--font-geist);
-  --color-accent: #3866e0;
-  --color-ink-high: #e4e7eb;
-  --color-ink-sec: #8a919c;
-  --color-ink-faint: #7b828c;
-}
-
-.bg-app {
-  background: #0B0C0E;
-}
-/* END V1 COMPAT */
-
 body {
   background-color: #0B0C0E;
 }

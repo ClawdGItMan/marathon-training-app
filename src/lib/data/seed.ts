@@ -258,7 +258,7 @@ export const seed: Seed = {
       after: wedEasyAfter,
       drivers: [
         { label: "HRV", value: "48", deltaPct: -12, tone: "negative" },
-        { label: "SLEEP", value: "6:12", deltaText: "−1:32", deltaColor: "#FF9A3D", tone: "negative" },
+        { label: "SLEEP", value: "6:12", deltaText: "−1:32", tone: "negative" },
         { label: "ACHILLES", value: "2/10 mild", tone: "warning" },
       ],
       status: "proposed",

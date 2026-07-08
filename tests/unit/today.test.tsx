@@ -34,7 +34,7 @@ test("Today composes readiness, recommendation, session, week and predicted line
 
   // Header: date context + mono SETTINGS link in the right slot.
   expect(screen.getByText("WED · JUL 1")).toBeInTheDocument();
-  expect(screen.getByText("SETTINGS").closest("a")).toHaveAttribute("href", "/settings");
+  expect(screen.getByText("SETTINGS").closest("a")).toHaveAttribute("href", "/settings?from=today");
 });
 
 test("ACCEPT mutates today's session to the easy swap", async () => {

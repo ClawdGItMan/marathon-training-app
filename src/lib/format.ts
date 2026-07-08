@@ -71,3 +71,10 @@ export function formatMinSec(totalSec: number): string {
   const s = Math.round(totalSec % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
+/** "2026-12-13" → "DEC 13 2026" (Settings RACE line, R12 — no v2 mock; follows
+ * the existing uppercase-month mono date convention from formatDayContext). */
+export function formatRaceDateLong(iso: string): string {
+  const date = new Date(`${iso}T00:00:00`);
+  const month = date.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
+  return `${month} ${date.getDate()} ${date.getFullYear()}`;
+}

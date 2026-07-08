@@ -54,8 +54,6 @@ export const proposalDriverSchema = z.object({
   deltaPct: z.number().optional(),
   /** Pre-formatted delta string when it isn't a percentage (design: SLEEP "−1:32"). */
   deltaText: z.string().optional(),
-  /** Explicit color for deltaText (design: SLEEP delta in #FF9A3D). */
-  deltaColor: z.string().optional(),
   tone: z.string().optional(),
 });
 

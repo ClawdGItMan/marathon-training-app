@@ -1,6 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
-import { Card } from "@/components/ui/Card";
 import { Section } from "@/components/ui/Section";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { CornerTickBox } from "@/components/ui/CornerTickBox";
@@ -8,11 +7,6 @@ import { TypeTag } from "@/components/ui/TypeTag";
 import { StatGrid } from "@/components/ui/StatGrid";
 import { SegmentMeter } from "@/components/ui/SegmentMeter";
 import { ProgressTicks } from "@/components/ui/ProgressTicks";
-
-test("Card applies .card class", () => {
-  const { container } = render(<Card>content</Card>);
-  expect(container.firstChild).toHaveClass("card");
-});
 
 test("SectionHeader shows label and optional action (v1 compat)", () => {
   render(<SectionHeader label="Today's Session" accent="#16e06a" action="Edit" actionHref="/plan" />);

@@ -83,7 +83,7 @@ export function TodayScreen() {
         sub={formatDayContext(todaySession.date)}
         right={
           <Link
-            href="/settings"
+            href="/settings?from=today"
             className="pb-[3px] font-mono text-[9.5px] tracking-[.14em] text-[#5c6168]"
           >
             SETTINGS
