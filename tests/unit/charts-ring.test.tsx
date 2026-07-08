@@ -49,6 +49,17 @@ test("RingGauge defaults to instrument track/arc colors and a thin stroke", () =
   expect(track).toHaveAttribute("stroke-width", "5");
 });
 
+test("RingGauge accepts a trackColor override (Body hero ring #7c: rgba(255,255,255,.08))", () => {
+  const { container } = render(
+    <RingGauge value={62} max={100} size={96} stroke={2} trackColor="rgba(255,255,255,.08)">
+      <span className="font-num">62</span>
+    </RingGauge>
+  );
+  const track = container.querySelector('circle[stroke="rgba(255,255,255,.08)"]');
+  expect(track).toBeTruthy();
+  expect(track).toHaveAttribute("stroke-width", "2");
+});
+
 test("RingGauge sweeps the arc over 1.2s", async () => {
   const { container } = render(
     <RingGauge value={62} max={100}>

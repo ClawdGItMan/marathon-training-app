@@ -11,6 +11,7 @@ export function RingGauge({
   value,
   max = 100,
   color = "#e8eaec",
+  trackColor = "#242930",
   size = 104,
   stroke = 5,
   children,
@@ -18,6 +19,8 @@ export function RingGauge({
   value: number;
   max?: number;
   color?: string;
+  /** Track (background) stroke color. #7c's 96px hero ring uses rgba(255,255,255,.08) instead of the shared #242930 default. */
+  trackColor?: string;
   size?: number;
   stroke?: number;
   children?: ReactNode;
@@ -64,7 +67,7 @@ export function RingGauge({
           cy={CENTER}
           r={RADIUS}
           fill="none"
-          stroke="#242930"
+          stroke={trackColor}
           strokeWidth={stroke}
         />
         <circle

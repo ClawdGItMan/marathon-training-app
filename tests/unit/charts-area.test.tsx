@@ -140,6 +140,22 @@ test("DotTrendChart connecting line is grey #565b62 with the drw draw-in dash pe
   expect(polyline!.getAttribute("style") || "").toContain("drw");
 });
 
+test("DotTrendChart renders a mid-height hairline reference line per design #7c", () => {
+  const trendPoints = [
+    { x: 10, y: 34.6, value: 65 },
+    { x: 65, y: 42.9, value: 40 },
+    { x: 120, y: 39.7, value: 55 },
+  ];
+  const { container } = render(
+    <DotTrendChart points={trendPoints} goodThreshold={60} height={56} />
+  );
+  const line = container.querySelector("line");
+  expect(line).toBeTruthy();
+  expect(line).toHaveAttribute("stroke", "rgba(255,255,255,.07)");
+  expect(line).toHaveAttribute("y1", "28");
+  expect(line).toHaveAttribute("y2", "28");
+});
+
 test("PeriodizationBars renders 16 bars", () => {
   const { container } = render(
     <PeriodizationBars weeks={weeks16} currentWeek={7} />
@@ -214,16 +230,19 @@ test("SleepStagesBar shows Deep 1:07 legend given deepMin 67, with instrument gr
   expect(html).not.toContain("rgb(124, 179, 217)"); // #7CB3D9
 });
 
-test("SleepStagesBar legend labels are uniform mono grey (#5c6168), not per-stage colored", () => {
+test("SleepStagesBar legend uses per-stage instrument greys per design #7c (DEEP #9aa0a7 / REM #7c828a / LIGHT #565b62)", () => {
   const { getByText } = render(
     <SleepStagesBar deepMin={67} remMin={85} lightMin={188} needMin={464} />
   );
   const deepLabel = getByText(/Deep 1:07/);
   const remLabel = getByText(/REM/);
   const lightLabel = getByText(/Light/);
+
+  expect(deepLabel.getAttribute("style") || "").toContain("rgb(154, 160, 167)"); // #9aa0a7
+  expect(remLabel.getAttribute("style") || "").toContain("rgb(124, 130, 138)"); // #7c828a
+  expect(lightLabel.getAttribute("style") || "").toContain("rgb(86, 91, 98)"); // #565b62
+
   [deepLabel, remLabel, lightLabel].forEach((label) => {
-    const style = label.getAttribute("style") || "";
-    expect(style).toContain("rgb(92, 97, 104)");
-    expect(style).toContain("var(--font-mono)");
+    expect(label.getAttribute("style") || "").toContain("var(--font-mono)");
   });
 });

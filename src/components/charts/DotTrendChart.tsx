@@ -1,6 +1,7 @@
 export type DotTrendPoint = { x: number; y: number; value: number };
 
-const DEFAULT_LABELS = ["T", "W", "T", "F", "S", "S", "M"];
+// Order matches design #7c RECOVERY · 7 DAYS day-of-week labels exactly (ends on today).
+const DEFAULT_LABELS = ["T", "F", "S", "S", "M", "T", "W"];
 // Draw-in dash length per design #7c RECOVERY · 7 DAYS (drw pattern): the
 // dasharray covers the full path so the line sweeps in once, then reads solid.
 const LINE_DASH = 380;
@@ -31,6 +32,14 @@ export function DotTrendChart({
         viewBox={`0 0 350 ${height}`}
         style={{ display: "block" }}
       >
+        <line
+          x1="0"
+          y1={height / 2}
+          x2="350"
+          y2={height / 2}
+          stroke="rgba(255,255,255,.07)"
+          strokeWidth={1}
+        />
         <polyline
           points={polylinePoints}
           fill="none"

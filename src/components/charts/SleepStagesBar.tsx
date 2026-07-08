@@ -9,13 +9,23 @@ const STAGE_COLOR = {
   empty: "#1c2025",
 };
 
-const LEGEND_STYLE = {
-  font: "500 8px var(--font-mono)",
-  letterSpacing: ".1em",
-  color: "#5c6168",
-  textTransform: "uppercase",
-  whiteSpace: "nowrap",
-} as const;
+// Per-stage legend greys per design #7c SLEEP legend row (distinct from the
+// bar-segment greys above): deep brightest, light dimmest.
+const LEGEND_COLOR = {
+  deep: "#9aa0a7",
+  rem: "#7c828a",
+  light: "#565b62",
+};
+
+function legendStyle(color: string) {
+  return {
+    font: "500 8px var(--font-mono)",
+    letterSpacing: ".1em",
+    color,
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+  } as const;
+}
 
 export function SleepStagesBar({
   deepMin,
@@ -50,9 +60,9 @@ export function SleepStagesBar({
         <div style={{ flex: 1, background: STAGE_COLOR.empty }} />
       </div>
       <div style={{ display: "flex", gap: 16, marginTop: 9 }}>
-        <span style={LEGEND_STYLE}>Deep {formatHM(deepMin)}</span>
-        <span style={LEGEND_STYLE}>REM {formatHM(remMin)}</span>
-        <span style={LEGEND_STYLE}>Light {formatHM(lightMin)}</span>
+        <span style={legendStyle(LEGEND_COLOR.deep)}>Deep {formatHM(deepMin)}</span>
+        <span style={legendStyle(LEGEND_COLOR.rem)}>REM {formatHM(remMin)}</span>
+        <span style={legendStyle(LEGEND_COLOR.light)}>Light {formatHM(lightMin)}</span>
       </div>
     </div>
   );
