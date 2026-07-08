@@ -121,6 +121,19 @@ test("StatGrid uses hairline column separators, not v1 rgba borders", () => {
   expect(container.querySelector(".hairline-r, [data-col-rule]")).not.toBeNull();
 });
 
+test("StatGrid rule={false} omits column separators (Progress #7b gap-only stat row)", () => {
+  const { container } = render(
+    <StatGrid
+      rule={false}
+      items={[
+        { label: "Distance", value: "32", unit: "mi" },
+        { label: "Time", value: "4:48" },
+      ]}
+    />
+  );
+  expect(container.querySelector(".hairline-r, [data-col-rule]")).toBeNull();
+});
+
 test("SegmentMeter fills to value", () => {
   const { container } = render(<SegmentMeter value={2} />);
   expect(container.querySelectorAll("[data-filled=true]").length).toBe(2);

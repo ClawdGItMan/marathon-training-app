@@ -5,7 +5,9 @@ test.describe("Progress screen", () => {
     await page.goto("/progress");
 
     await expect(page.getByText("Honolulu Marathon")).toBeVisible();
+    await expect(page.getByText("12-DAY STREAK")).toBeVisible();
     await expect(page.getByText("PREDICTIONS")).toBeVisible();
+    await expect(page.getByText("FITNESS")).toHaveCount(0);
 
     const weekChart = page.getByTestId("week-chart");
     await expect(weekChart.locator("polyline")).toBeVisible();

@@ -1,21 +1,7 @@
 import Link from "next/link";
 import { Section } from "@/components/ui/Section";
-import { formatClock } from "@/lib/format";
+import { formatClock, formatDeltaMSS, formatGoalHM } from "@/lib/format";
 import type { Prediction, RaceGoal, TrainingBlock } from "@/lib/domain/types";
-
-/** 14400 → "4:00" (goal time in h:mm). */
-function formatGoalHM(totalSec: number): string {
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.round((totalSec % 3600) / 60);
-  return `${h}:${String(m).padStart(2, "0")}`;
-}
-
-/** −132 → "−2:12" (prediction delta, U+2212 minus per design #7b). */
-function formatDeltaMSS(deltaSec: number): string {
-  const abs = Math.abs(deltaSec);
-  const sign = deltaSec < 0 ? "−" : "+";
-  return `${sign}${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, "0")}`;
-}
 
 /**
  * Bottom-of-Today glance lines as Instrument ruled sections:

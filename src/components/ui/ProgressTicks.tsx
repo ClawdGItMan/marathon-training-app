@@ -17,7 +17,7 @@ export function ProgressTicks({
 }) {
   void current;
   return (
-    <div className="mt-[13px] flex gap-[3px]">
+    <div className="mt-[10px] flex gap-[3px]">
       {Array.from({ length: total }, (_, i) => {
         const filled = i < done;
         return (
@@ -25,9 +25,9 @@ export function ProgressTicks({
             key={i}
             data-tick
             data-filled={filled}
-            className="h-[5px] flex-1 rounded-[1px]"
+            className="h-[2px] w-[14px] flex-none rounded-[1px]"
             style={{
-              backgroundColor: filled ? "#C9F53F" : "#22262c",
+              backgroundColor: filled ? "#C9F53F" : "#2a2f36",
             }}
           />
         );
