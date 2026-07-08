@@ -1,0 +1,110 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { LogScreen } from "@/components/log/LogScreen";
+import { localRepo } from "@/lib/data/local-repo";
+
+const push = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+}));
+
+beforeEach(() => {
+  localStorage.clear();
+  push.mockClear();
+});
+afterEach(cleanup);
+
+// No v1 Log screen or tests survived the R2 reskin pivot (git history has no
+// prior Log component/route — R2 shipped a bare stub). These are written
+// fresh against the repo's existing logRun/logPain overlay semantics
+// (src/lib/data/repo.ts), per the R10 brief.
+
+test("Log screen shows the imported Strava run with no SYNCED badge", async () => {
+  render(<LogScreen />);
+
+  expect(await screen.findByText("AUTO-IMPORTED · STRAVA")).toBeInTheDocument();
+  expect(screen.getByText("Easy run")).toBeInTheDocument();
+  expect(screen.getByText("4.0")).toBeInTheDocument();
+  expect(screen.getByText("38:24")).toBeInTheDocument();
+  expect(screen.getByText("9:36")).toBeInTheDocument();
+
+  expect(screen.queryByText("SYNCED")).not.toBeInTheDocument();
+});
+
+test("RPE defaults to 4/10 and tapping a segment updates the readout", async () => {
+  render(<LogScreen />);
+
+  await screen.findByText("HOW HARD? · RPE");
+  expect(screen.getByText("4")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "RPE 8" }));
+
+  expect(await screen.findByText("8")).toBeInTheDocument();
+});
+
+test("pain chips default to the highest-severity seed area (achilles-l) with SEVERITY shown", async () => {
+  render(<LogScreen />);
+
+  const achillesL = await screen.findByRole("button", { name: "ACHILLES · L" });
+  expect(achillesL).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "ACHILLES · R" })).toHaveAttribute(
+    "aria-pressed",
+    "false"
+  );
+  expect(screen.getByText("SEVERITY")).toBeInTheDocument();
+  // seed.pains achilles-l severity is 2
+  expect(screen.getByText("2")).toBeInTheDocument();
+});
+
+test("selecting NONE clears the pain selection and hides SEVERITY", async () => {
+  render(<LogScreen />);
+
+  await screen.findByRole("button", { name: "ACHILLES · L" });
+  fireEvent.click(screen.getByRole("button", { name: "NONE" }));
+
+  expect(screen.queryByText("SEVERITY")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "NONE" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("SAVE LOG writes rpe + pain via logRun and redirects to /today", async () => {
+  render(<LogScreen />);
+
+  await screen.findByRole("button", { name: "ACHILLES · L" });
+  fireEvent.click(screen.getByRole("button", { name: "RPE 6" }));
+  fireEvent.click(screen.getByRole("button", { name: "Severity 3" }));
+
+  fireEvent.click(screen.getByRole("button", { name: "SAVE LOG" }));
+
+  await waitFor(() => expect(push).toHaveBeenCalledWith("/today"));
+
+  const session = await localRepo.getSession("wed-400s");
+  expect(session.status).toBe("completed");
+
+  const pains = await localRepo.getPains();
+  expect(pains.find((p) => p.id === "achilles-l")!.severity).toBe(3);
+});
+
+test("SAVE LOG with NONE selected omits pain fields but still logs the run", async () => {
+  render(<LogScreen />);
+
+  await screen.findByRole("button", { name: "ACHILLES · L" });
+  fireEvent.click(screen.getByRole("button", { name: "NONE" }));
+  fireEvent.click(screen.getByRole("button", { name: "SAVE LOG" }));
+
+  await waitFor(() => expect(push).toHaveBeenCalledWith("/today"));
+
+  // achilles-l severity is untouched (still the seed default of 2), proving
+  // no pain override was written for this save.
+  const pains = await localRepo.getPains();
+  expect(pains.find((p) => p.id === "achilles-l")!.severity).toBe(2);
+});
+
+test("?focus=pain scrolls the pain section into view", async () => {
+  const scrollIntoView = vi.fn();
+  Element.prototype.scrollIntoView = scrollIntoView;
+
+  render(<LogScreen focusPain />);
+
+  await screen.findByRole("button", { name: "ACHILLES · L" });
+  await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+});

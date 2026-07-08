@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { expect, test, vi } from "vitest";
 import { Card } from "@/components/ui/Card";
 import { Section } from "@/components/ui/Section";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -144,6 +144,36 @@ test("SegmentMeter defaults to lime fill color", () => {
   const { container } = render(<SegmentMeter value={1} />);
   const filled = container.querySelector("[data-filled=true]") as HTMLElement;
   expect(filled.style.backgroundColor).toBe("rgb(201, 245, 63)");
+});
+
+test("SegmentMeter defaults to 26px segments when height is omitted", () => {
+  const { container } = render(<SegmentMeter value={1} />);
+  const seg = container.querySelector("[data-filled=true]") as HTMLElement;
+  expect(seg.style.height).toBe("26px");
+});
+
+test("SegmentMeter renders thin segments for a custom height (Log SEVERITY, design #7d)", () => {
+  const { container } = render(<SegmentMeter value={2} height={8} color="#fff" />);
+  const seg = container.querySelector("[data-filled=true]") as HTMLElement;
+  expect(seg.style.height).toBe("8px");
+  expect(seg.style.backgroundColor).toBe("rgb(255, 255, 255)");
+});
+
+test("SegmentMeter is read-only (spans) when no onChange is given", () => {
+  const { container } = render(<SegmentMeter value={2} />);
+  expect(container.querySelector("button")).toBeNull();
+  expect(container.querySelectorAll("span[data-filled]").length).toBe(10);
+});
+
+test("SegmentMeter renders clickable segments and reports the tapped value (Log RPE, design #7d)", () => {
+  const onChange = vi.fn();
+  render(<SegmentMeter value={4} onChange={onChange} ariaLabel="RPE" />);
+
+  const buttons = screen.getAllByRole("button");
+  expect(buttons).toHaveLength(10);
+  fireEvent.click(screen.getByRole("button", { name: "RPE 7" }));
+
+  expect(onChange).toHaveBeenCalledWith(7);
 });
 
 test("ProgressTicks renders total ticks with done filled", () => {

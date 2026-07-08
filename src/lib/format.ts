@@ -59,3 +59,15 @@ export function parseEstMinutes(detail: string): string {
   const match = detail.match(/~(\d+)\s*min/);
   return match ? `~${match[1]}` : "";
 }
+/** "Easy run · 4 mi" → "Easy run" (Log's imported-run headline, design #7d — the
+ * distance suffix is redundant with the DISTANCE stat shown right below it). */
+export function formatActivityTitle(title: string): string {
+  return title.split(" · ")[0];
+}
+/** 2304 → "38:24" (Log's imported-run TIME stat, design #7d — plain m:ss, unlike
+ * formatClock's h:mm:ss). */
+export function formatMinSec(totalSec: number): string {
+  const m = Math.floor(totalSec / 60);
+  const s = Math.round(totalSec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
