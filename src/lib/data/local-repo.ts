@@ -16,7 +16,7 @@ import type { LogRunEntry, ProposalDecision, Repo, StrengthSession } from "@/lib
 const STORAGE_KEY = "marathon.phase1.state";
 
 const proposalDecisionSchema = z.object({
-  status: z.enum(["accepted", "modified", "dismissed"]),
+  status: z.enum(["accepted", "modified", "dismissed", "expired"]),
   editedSession: sessionSchema.optional(),
 });
 
@@ -89,13 +89,19 @@ function resolveWeekSessions(overlay: Overlay): PlannedSession[] {
   return seed.week.map((session) => resolveSession(session, overlay));
 }
 
+/**
+ * A session can carry several open proposals (v2 seed: the day-scope easy
+ * swap and the workout-scope 600s variant both target wed-400s). Accepting
+ * or modifying ANY of them expires the others (see `decideProposal`), so at
+ * most one can ever carry status "accepted"/"modified" at a time — no
+ * ambiguity, no seed-order dependence. "dismissed" and "expired" both leave
+ * the plan untouched; keep scanning past them for the (at most one) decided
+ * accept/modify.
+ */
 function resolveSession(session: PlannedSession, overlay: Overlay): PlannedSession {
   let resolved = session;
+  const originalId = session.id;
 
-  // A session can carry several open proposals (v2 seed: the day-scope easy
-  // swap and the workout-scope 600s variant both target wed-400s). Apply the
-  // first decided accept/modify; "dismissed" never touches the plan, so keep
-  // scanning past it.
   for (const proposal of seed.proposals.filter((p) => p.targetSessionId === session.id)) {
     const decision = overlay.proposalDecisions[proposal.id];
     if (!decision) continue;
@@ -109,12 +115,37 @@ function resolveSession(session: PlannedSession, overlay: Overlay): PlannedSessi
     }
   }
 
-  const statusOverride = overlay.sessionStatusChanges[resolved.id];
+  // An accepted/modified proposal can change the session's id (e.g.
+  // proposal-2: sun-long → sat-long-moved). Status overrides may have been
+  // written keyed to either the pre- or post-proposal id, so check both.
+  const statusOverride =
+    overlay.sessionStatusChanges[resolved.id] ?? overlay.sessionStatusChanges[originalId];
   if (statusOverride) {
     resolved = { ...resolved, status: statusOverride };
   }
 
   return resolved;
+}
+
+/**
+ * Finds the seed session id whose decided proposal resolves to `resultingId`
+ * (the id an accept/modify produced, e.g. "sat-long-moved"). Lets
+ * `getSession` be called with either the pre-proposal or post-proposal id and
+ * resolve to the same session (F3: moved-session id resolution).
+ */
+function findSeedIdForResultingId(resultingId: string, overlay: Overlay): string | undefined {
+  for (const proposal of seed.proposals) {
+    const decision = overlay.proposalDecisions[proposal.id];
+    if (!decision) continue;
+    const producedId =
+      decision.status === "accepted"
+        ? proposal.after.id
+        : decision.status === "modified"
+          ? decision.editedSession?.id
+          : undefined;
+    if (producedId === resultingId) return proposal.targetSessionId;
+  }
+  return undefined;
 }
 
 function resolvePains(overlay: Overlay): PainArea[] {
@@ -164,9 +195,17 @@ async function getWeekSessions(): Promise<PlannedSession[]> {
   return resolveWeekSessions(overlay);
 }
 
+function findSeedSession(id: string): PlannedSession | undefined {
+  return seed.week.find((s) => s.id === id) ?? (seed.workoutDetail.id === id ? seed.workoutDetail : undefined);
+}
+
 async function getSession(id: string): Promise<PlannedSession> {
   const overlay = readOverlay();
-  const base = seed.week.find((s) => s.id === id) ?? (seed.workoutDetail.id === id ? seed.workoutDetail : undefined);
+  // id may be a seed id directly, or the id an accepted/modified proposal
+  // produced (e.g. "sat-long-moved") — resolve to the underlying seed id
+  // either way so both the old and new id land on the same session.
+  const seedId = findSeedSession(id) ? id : (findSeedIdForResultingId(id, overlay) ?? id);
+  const base = findSeedSession(seedId);
   if (!base) throw new Error(`Unknown session: ${id}`);
   return resolveSession(base, overlay);
 }
@@ -195,6 +234,22 @@ async function decideProposal(
       status: decision,
       editedSession: decision === "modified" ? edited : undefined,
     };
+
+    // Accept/modify resolves what "the plan for this session" is — any other
+    // still-open proposal targeting the same session no longer describes a
+    // change against current reality, so it expires. Nothing is auto-applied
+    // by this: expiring a suggestion applies no plan change, it just retires
+    // a stale offer (F1). Dismiss never cascades — a dismissed decision (or
+    // any other already-decided one) is left exactly as it is.
+    if (decision === "accepted" || decision === "modified") {
+      for (const other of seed.proposals) {
+        if (other.id === proposal.id) continue;
+        if (other.targetSessionId !== proposal.targetSessionId) continue;
+        if (other.status !== "proposed") continue;
+        if (overlay.proposalDecisions[other.id]) continue; // already decided — leave as-is
+        overlay.proposalDecisions[other.id] = { status: "expired" };
+      }
+    }
   });
 }
 
