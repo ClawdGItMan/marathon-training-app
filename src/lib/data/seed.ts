@@ -1,37 +1,14 @@
 import type { Seed } from "@/lib/domain/schemas";
 
-const monTempo: Seed["week"][number] = {
-  id: "mon-tempo",
-  date: "2026-06-29",
-  type: "tempo",
-  title: "Tempo",
-  detail: "6 mi · Zone 3–4 · 8:05/mi",
-  distanceMi: 6,
-  paceTarget: "8:05/mi",
-  zone: "Zone 3–4",
-  status: "planned",
-  provenance: "original",
-};
-
-const monEasyAfter: Seed["week"][number] = {
-  id: "mon-tempo",
-  date: "2026-06-29",
-  type: "easy",
-  title: "Easy",
-  detail: "4 mi · Zone 2 · 9:30/mi",
-  distanceMi: 4,
-  paceTarget: "9:30/mi",
-  zone: "Zone 2",
-  status: "planned",
-  provenance: "accepted-proposal",
-};
+// Canonical v2 day: today = WED JUL 1, todaySessionId = wed-400s.
+// Week rows mirror design-v2/Daily Screen Directions.dc.html #7a (MON 29 … SUN 05).
 
 const wed400s: Seed["workoutDetail"] = {
   id: "wed-400s",
   date: "2026-07-01",
   type: "speed",
   title: "Rolling 400s",
-  detail: "4.5 mi · ~45 min · 3 blocks",
+  detail: "Intervals · 4.5 mi · ~45 min",
   distanceMi: 4.5,
   paceTarget: "5K pace",
   zone: "Zone 4–5",
@@ -45,6 +22,21 @@ const wed400s: Seed["workoutDetail"] = {
   ],
 };
 
+// Day-scope HOLD swap for today: ease off the 400s, run easy 4 miles instead.
+const wedEasyAfter: Seed["week"][number] = {
+  id: "wed-400s",
+  date: "2026-07-01",
+  type: "easy",
+  title: "Easy",
+  detail: "4 mi · Zone 2 · 9:30/mi",
+  distanceMi: 4,
+  paceTarget: "9:30/mi",
+  zone: "Zone 2",
+  status: "planned",
+  provenance: "accepted-proposal",
+};
+
+// Workout-scope variant of the same session (coach chat, #7f): 5 × 600m.
 const wed600sAfter: Seed["workoutDetail"] = {
   id: "wed-400s",
   date: "2026-07-01",
@@ -64,23 +56,23 @@ const wed600sAfter: Seed["workoutDetail"] = {
   ],
 };
 
-const satLong: Seed["week"][number] = {
-  id: "sat-long",
-  date: "2026-07-04",
+const sunLong: Seed["week"][number] = {
+  id: "sun-long",
+  date: "2026-07-05",
   type: "long",
   title: "Long run",
-  detail: "14 mi · Zone 2 · key session",
-  distanceMi: 14,
-  zone: "Zone 2",
+  detail: "12 mi · Zone 2–3",
+  distanceMi: 12,
+  zone: "Zone 2–3",
   status: "planned",
   provenance: "original",
 };
 
-const sunAfterMove: Seed["week"][number] = {
-  ...satLong,
-  id: "sun-long-moved",
-  date: "2026-07-05",
-  detail: "14 mi · Zone 2 · moved from Saturday",
+const satAfterMove: Seed["week"][number] = {
+  ...sunLong,
+  id: "sat-long-moved",
+  date: "2026-07-04",
+  detail: "12 mi · Zone 2–3 · moved from Sunday",
 };
 
 export const seed: Seed = {
@@ -89,7 +81,7 @@ export const seed: Seed = {
     date: "2026-12-13",
     goalSec: 14400,
     predictedSec: 14170,
-    daysOut: 167,
+    daysOut: 165,
     streak: 12,
   },
   block: {
@@ -99,11 +91,11 @@ export const seed: Seed = {
     totalWeeks: 16,
     weekMilesDone: 32,
     weekMilesTarget: 41,
-    longRunLabel: "SAT · 14 MI",
+    longRunLabel: "SUN · 12 MI",
   },
   recovery: [
     {
-      date: "2026-06-23",
+      date: "2026-06-25",
       recoveryPct: 69,
       recoveryDelta: 4,
       hrv: 55,
@@ -116,7 +108,7 @@ export const seed: Seed = {
       loadLabel: "moderate",
     },
     {
-      date: "2026-06-24",
+      date: "2026-06-26",
       recoveryPct: 59,
       recoveryDelta: -10,
       hrv: 51,
@@ -129,7 +121,7 @@ export const seed: Seed = {
       loadLabel: "moderate",
     },
     {
-      date: "2026-06-25",
+      date: "2026-06-27",
       recoveryPct: 63,
       recoveryDelta: 4,
       hrv: 53,
@@ -142,7 +134,7 @@ export const seed: Seed = {
       loadLabel: "moderate",
     },
     {
-      date: "2026-06-26",
+      date: "2026-06-28",
       recoveryPct: 56,
       recoveryDelta: -7,
       hrv: 50,
@@ -155,7 +147,7 @@ export const seed: Seed = {
       loadLabel: "elevated",
     },
     {
-      date: "2026-06-27",
+      date: "2026-06-29",
       recoveryPct: 72,
       recoveryDelta: 16,
       hrv: 56,
@@ -168,7 +160,7 @@ export const seed: Seed = {
       loadLabel: "moderate",
     },
     {
-      date: "2026-06-28",
+      date: "2026-06-30",
       recoveryPct: 67,
       recoveryDelta: -5,
       hrv: 54,
@@ -181,7 +173,7 @@ export const seed: Seed = {
       loadLabel: "moderate",
     },
     {
-      date: "2026-06-29",
+      date: "2026-07-01",
       recoveryPct: 62,
       recoveryDelta: -9,
       hrv: 48,
@@ -194,22 +186,54 @@ export const seed: Seed = {
       loadLabel: "elevated",
     },
   ],
-  todaySessionId: "mon-tempo",
+  todaySessionId: "wed-400s",
   week: [
-    monTempo,
     {
-      id: "tue-rest",
+      id: "mon-easy",
+      date: "2026-06-29",
+      type: "easy",
+      title: "Easy run",
+      detail: "4 mi · Zone 2",
+      distanceMi: 4,
+      zone: "Zone 2",
+      status: "completed",
+      provenance: "original",
+    },
+    {
+      id: "tue-intervals",
       date: "2026-06-30",
-      type: "rest",
-      title: "Rest",
-      detail: "Mobility & calf loading",
-      status: "planned",
+      type: "speed",
+      title: "Intervals",
+      detail: "6 × 800m · Zone 4–5",
+      distanceMi: 5,
+      zone: "Zone 4–5",
+      status: "completed",
       provenance: "original",
     },
     wed400s,
     {
-      id: "thu-easy",
+      id: "thu-tempo",
       date: "2026-07-02",
+      type: "tempo",
+      title: "Tempo",
+      detail: "6 mi · Zone 3–4",
+      distanceMi: 6,
+      zone: "Zone 3–4",
+      status: "planned",
+      provenance: "original",
+    },
+    {
+      id: "fri-rest",
+      date: "2026-07-03",
+      type: "rest",
+      title: "Rest",
+      detail: "Mobility",
+      status: "planned",
+      provenance: "original",
+    },
+    {
+      id: "sat-easy",
+      date: "2026-07-04",
       type: "easy",
       title: "Easy run",
       detail: "5 mi · Zone 2",
@@ -218,40 +242,20 @@ export const seed: Seed = {
       status: "planned",
       provenance: "original",
     },
-    {
-      id: "fri-strength",
-      date: "2026-07-03",
-      type: "strength",
-      title: "Strength · lower",
-      detail: "Lower body · ~35 min",
-      status: "planned",
-      provenance: "original",
-    },
-    satLong,
-    {
-      id: "sun-recovery",
-      date: "2026-07-05",
-      type: "recovery",
-      title: "Recovery",
-      detail: "3 mi · Zone 1 · + strength",
-      distanceMi: 3,
-      zone: "Zone 1",
-      status: "planned",
-      provenance: "original",
-    },
+    sunLong,
   ],
   proposals: [
     {
       id: "proposal-1",
       scope: "day",
-      targetSessionId: "mon-tempo",
+      targetSessionId: "wed-400s",
       headline: "Ease off today.",
-      subhead: "Swap the tempo for an easy 4 miles.",
+      subhead: "Swap the 400s for an easy 4 miles.",
       rationale:
         "Readiness is down nine points and your Achilles flagged mild yesterday. A lighter day keeps the build on schedule without compounding load on the tendon — we'll reassess in the morning.",
       badge: "HOLD",
-      before: monTempo,
-      after: monEasyAfter,
+      before: wed400s,
+      after: wedEasyAfter,
       drivers: [
         { label: "HRV", value: "48", deltaPct: -12, tone: "negative" },
         { label: "SLEEP", value: "6:12", deltaText: "−1:32", deltaColor: "#FF9A3D", tone: "negative" },
@@ -263,17 +267,17 @@ export const seed: Seed = {
     {
       id: "proposal-2",
       scope: "week",
-      targetSessionId: "sat-long",
-      headline: "Move long run to Sunday",
-      subhead: "Rain forecast Saturday — shift the 14 miler.",
+      targetSessionId: "sun-long",
+      headline: "Move long run to Saturday",
+      subhead: "Rain forecast Sunday — shift the 12 miler.",
       rationale:
-        "Heavy rain is forecast for Saturday morning. Moving the long run to Sunday keeps the key session intact without the weather risk.",
+        "Heavy rain is forecast for Sunday morning. Moving the long run to Saturday keeps the key session intact without the weather risk.",
       badge: "ADJUST",
-      before: satLong,
-      after: sunAfterMove,
+      before: sunLong,
+      after: satAfterMove,
       drivers: [
-        { label: "WEATHER", value: "Rain · Sat", tone: "warning" },
-        { label: "LONG RUN", value: "14 mi", tone: "neutral" },
+        { label: "WEATHER", value: "Rain · Sun", tone: "warning" },
+        { label: "LONG RUN", value: "12 mi", tone: "neutral" },
       ],
       status: "proposed",
       reviewedAt: "6:41 AM",
@@ -319,10 +323,10 @@ export const seed: Seed = {
     },
   ],
   predictions: [
-    { distance: "5K", timeSec: 1290, paceSecPerMi: 415, deltaSec: -18 },
-    { distance: "10K", timeSec: 2690, paceSecPerMi: 433, deltaSec: -35 },
-    { distance: "HALF", timeSec: 6680, paceSecPerMi: 510, deltaSec: -70 },
-    { distance: "FULL", timeSec: 14170, paceSecPerMi: 540, deltaSec: -160 },
+    { distance: "5K", timeSec: 1290, paceSecPerMi: 415, deltaSec: -24 },
+    { distance: "10K", timeSec: 2690, paceSecPerMi: 433, deltaSec: -41 },
+    { distance: "HALF", timeSec: 6680, paceSecPerMi: 510, deltaSec: -65 },
+    { distance: "FULL", timeSec: 14170, paceSecPerMi: 540, deltaSec: -132 },
   ],
   strength: {
     phase: "MAX STRENGTH · DELOAD",
@@ -381,7 +385,7 @@ export const seed: Seed = {
     {
       id: "msg-1",
       role: "coach",
-      text: "Morning. Readiness is down nine points and your Achilles flagged mild yesterday, so I'm proposing an easy day instead of the tempo — and I've also lined up a Sunday move for the long run in case Saturday's rain holds.",
+      text: "Morning. Readiness is down nine points and your Achilles flagged mild yesterday, so I'm proposing an easy day instead of the 400s — and I've also lined up a Saturday move for the long run in case Sunday's rain holds.",
       proposalRefs: ["proposal-1", "proposal-2"],
     },
     {

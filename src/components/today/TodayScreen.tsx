@@ -1,24 +1,23 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { localRepo } from "@/lib/data/local-repo";
 import type { ProposalDecision } from "@/lib/data/repo";
 import type {
-  PainArea,
   PlannedSession,
+  Prediction,
   Proposal,
   RaceGoal,
   RecoverySnapshot,
   TrainingBlock,
 } from "@/lib/domain/types";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { RaceCountdown } from "@/components/today/RaceCountdown";
-import { RingsTrio } from "@/components/today/RingsTrio";
-import { RecommendationCard } from "@/components/today/RecommendationCard";
-import { SessionCard } from "@/components/today/SessionCard";
-import { BodyGlance } from "@/components/today/BodyGlance";
-import { BlockGlance } from "@/components/today/BlockGlance";
-import { ProgressGlimpse } from "@/components/today/ProgressGlimpse";
+import { Section } from "@/components/ui/Section";
+import { GlanceLines } from "@/components/today/GlanceLines";
+import { ReadinessHero } from "@/components/today/ReadinessHero";
+import { RecommendationBox } from "@/components/today/RecommendationBox";
+import { SessionRows } from "@/components/today/SessionRows";
 
 type TodayState = {
   goal: RaceGoal;
@@ -26,32 +25,34 @@ type TodayState = {
   block: TrainingBlock;
   todaySession: PlannedSession;
   dayProposal?: Proposal;
-  pain: PainArea;
-  mileage12wk: number[];
+  fullPrediction?: Prediction;
 };
 
 async function loadTodayState(): Promise<TodayState> {
-  const [goal, recovery, block, week, proposals, pains] = await Promise.all([
+  const [goal, recovery, block, week, proposals, predictions] = await Promise.all([
     localRepo.getGoal(),
     localRepo.getLatestRecovery(),
     localRepo.getBlock(),
     localRepo.getWeekSessions(),
     localRepo.getOpenProposals(),
-    localRepo.getPains(),
+    localRepo.getPredictions(),
   ]);
 
   const todaySession = week.find((s) => s.date === recovery.date) ?? week[0];
   const dayProposal = proposals.find(
     (p) => p.scope === "day" && p.targetSessionId === todaySession.id
   );
-  const pain = pains[0];
-  // Reuse the 12-wk mileage series already present in seed via a dedicated call
-  // isn't part of Repo; TodayScreen derives it from the recovery load for the
-  // sparkline tail — full history lives on the Progress screen.
-  const recovery7d = await localRepo.getRecovery7d();
-  const mileage12wk = recovery7d.map((s) => Math.round(s.load * 25));
+  const fullPrediction = predictions.find((p) => p.distance === "FULL");
 
-  return { goal, recovery, block, todaySession, dayProposal, pain, mileage12wk };
+  return { goal, recovery, block, todaySession, dayProposal, fullPrediction };
+}
+
+/** "2026-07-01" → "WED · JUL 1" (page-header date context). */
+function formatDayContext(iso: string): string {
+  const date = new Date(`${iso}T00:00:00`);
+  const weekday = date.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+  const month = date.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
+  return `${weekday} · ${month} ${date.getDate()}`;
 }
 
 export function TodayScreen() {
@@ -80,51 +81,42 @@ export function TodayScreen() {
 
   if (!state) return null;
 
-  const { goal, recovery, block, todaySession, dayProposal, pain, mileage12wk } = state;
+  const { goal, recovery, block, todaySession, dayProposal, fullPrediction } = state;
 
   return (
-    <div className="bg-app pb-6">
-      <PageHeader title="Today" from="today" />
-      <RaceCountdown raceName={goal.name} daysOut={goal.daysOut} />
-
-      <RingsTrio
-        readiness={recovery.recoveryPct}
-        readinessDelta={recovery.recoveryDelta}
-        sleepPct={recovery.sleep.sleepScorePct}
-        sleepDuration={`${Math.floor(recovery.sleep.durationMin / 60)}h ${recovery.sleep.durationMin % 60}m`}
-        load={recovery.load}
-        loadLabel={recovery.loadLabel}
+    <div className="pb-6">
+      <PageHeader
+        title="Today"
+        sub={formatDayContext(todaySession.date)}
+        right={
+          <Link
+            href="/settings"
+            className="pb-[3px] font-mono text-[9.5px] tracking-[.14em] text-[#5c6168]"
+          >
+            SETTINGS
+          </Link>
+        }
+        from="today"
       />
 
+      <div className="mt-[6px]">
+        <ReadinessHero recovery={recovery} />
+      </div>
+
       {dayProposal ? (
-        <RecommendationCard
+        <RecommendationBox
           proposal={dayProposal}
           onDecide={(decision, edited) => handleDecide(dayProposal.id, decision, edited)}
         />
       ) : null}
 
-      <div className="mt-[22px] mb-[10px] flex items-center justify-between px-[18px]">
-        <span className="inline-flex items-center gap-[9px]">
-          <span className="block h-[14px] w-[3px] rounded-[1px] bg-[#16e06a]" />
-          <span className="font-ui text-[13px] font-bold tracking-[.04em] text-white">
-            TODAY&apos;S SESSION
-          </span>
-        </span>
-        <span className="font-ui text-[11px] font-semibold text-[#7b828c]">EDIT ›</span>
-      </div>
-      <SessionCard planned={todaySession} proposed={dayProposal?.after} />
-
-      <div className="mt-[22px]">
-        <BodyGlance pain={pain} />
+      <div className="px-[22px] pt-[18px]">
+        <Section header={{ label: "TODAY'S SESSION" }}>
+          <SessionRows planned={todaySession} proposed={dayProposal?.after} />
+        </Section>
       </div>
 
-      <div className="mt-[22px]">
-        <BlockGlance block={block} />
-      </div>
-
-      <div className="mt-[22px]">
-        <ProgressGlimpse goal={goal} mileage12wk={mileage12wk} />
-      </div>
+      <GlanceLines goal={goal} block={block} fullPrediction={fullPrediction} />
     </div>
   );
 }

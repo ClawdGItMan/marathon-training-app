@@ -29,7 +29,8 @@ export function FocusCard({ goal }: { goal: RaceGoal }) {
           </div>
         </div>
       </div>
-      <ProgressTicks done={4} total={12} />
+      {/* Block week 7 of 16 — v2 canonical (#7b YOUR FOCUS ticks). */}
+      <ProgressTicks done={7} total={16} />
     </div>
   );
 }

@@ -92,16 +92,20 @@ function resolveWeekSessions(overlay: Overlay): PlannedSession[] {
 function resolveSession(session: PlannedSession, overlay: Overlay): PlannedSession {
   let resolved = session;
 
-  const proposal = seed.proposals.find((p) => p.targetSessionId === session.id);
-  if (proposal) {
+  // A session can carry several open proposals (v2 seed: the day-scope easy
+  // swap and the workout-scope 600s variant both target wed-400s). Apply the
+  // first decided accept/modify; "dismissed" never touches the plan, so keep
+  // scanning past it.
+  for (const proposal of seed.proposals.filter((p) => p.targetSessionId === session.id)) {
     const decision = overlay.proposalDecisions[proposal.id];
-    if (decision) {
-      if (decision.status === "accepted") {
-        resolved = { ...proposal.after, provenance: "accepted-proposal" };
-      } else if (decision.status === "modified" && decision.editedSession) {
-        resolved = { ...decision.editedSession, provenance: "modified-proposal" };
-      }
-      // "dismissed" leaves the session untouched.
+    if (!decision) continue;
+    if (decision.status === "accepted") {
+      resolved = { ...proposal.after, provenance: "accepted-proposal" };
+      break;
+    }
+    if (decision.status === "modified" && decision.editedSession) {
+      resolved = { ...decision.editedSession, provenance: "modified-proposal" };
+      break;
     }
   }
 

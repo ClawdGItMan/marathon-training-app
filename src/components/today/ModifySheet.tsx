@@ -10,6 +10,17 @@ const editSchema = z.object({
   paceTarget: z.string().trim().optional(),
 });
 
+const labelClass =
+  "mt-[14px] block font-mono text-[9px] uppercase tracking-[.14em] text-[#5c6168]";
+const inputClass =
+  "mt-[6px] w-full rounded-[2px] bg-transparent px-3 py-[10px] font-num text-[14px] text-white outline-none";
+const inputBorder = { border: "1px solid var(--hair)" };
+
+/**
+ * Modify sheet restyled to Instrument: flat #0B0C0E hairline box, mono
+ * micro-labels, 50px lime SAVE CTA (global pattern), mono ghost CANCEL.
+ * Behavior unchanged: Zod-validated edit, save hands the edited session up.
+ */
 export function ModifySheet({
   session,
   onSave,
@@ -40,27 +51,27 @@ export function ModifySheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50">
-      <div className="w-full max-w-[414px] rounded-t-[16px] border border-white/[.05] bg-[#171c23] p-[18px] pb-[26px]">
-        <div className="font-ui text-[15px] font-bold text-white">Modify session</div>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60">
+      <div
+        className="w-full max-w-[414px] rounded-[2px] bg-[#0B0C0E] p-[18px] pb-[26px]"
+        style={inputBorder}
+      >
+        <span className="font-mono text-[9.5px] uppercase tracking-[.18em] text-sig">
+          MODIFY SESSION
+        </span>
 
-        <label
-          htmlFor="modify-title"
-          className="mt-[14px] block font-ui text-[10px] font-bold tracking-[.1em] text-[#8a919c]"
-        >
+        <label htmlFor="modify-title" className={labelClass}>
           TITLE
         </label>
         <input
           id="modify-title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="mt-[6px] w-full rounded-ctl border border-white/[.1] bg-transparent px-[12px] py-[10px] font-ui text-[14px] text-white outline-none"
+          className={inputClass}
+          style={inputBorder}
         />
 
-        <label
-          htmlFor="modify-distance"
-          className="mt-[12px] block font-ui text-[10px] font-bold tracking-[.1em] text-[#8a919c]"
-        >
+        <label htmlFor="modify-distance" className={labelClass}>
           DISTANCE (MI)
         </label>
         <input
@@ -68,40 +79,37 @@ export function ModifySheet({
           value={distanceMi}
           onChange={(e) => setDistanceMi(e.target.value)}
           inputMode="decimal"
-          className="mt-[6px] w-full rounded-ctl border border-white/[.1] bg-transparent px-[12px] py-[10px] font-ui text-[14px] text-white outline-none"
+          className={inputClass}
+          style={inputBorder}
         />
 
-        <label
-          htmlFor="modify-pace"
-          className="mt-[12px] block font-ui text-[10px] font-bold tracking-[.1em] text-[#8a919c]"
-        >
+        <label htmlFor="modify-pace" className={labelClass}>
           PACE TARGET
         </label>
         <input
           id="modify-pace"
           value={paceTarget}
           onChange={(e) => setPaceTarget(e.target.value)}
-          className="mt-[6px] w-full rounded-ctl border border-white/[.1] bg-transparent px-[12px] py-[10px] font-ui text-[14px] text-white outline-none"
+          className={inputClass}
+          style={inputBorder}
         />
 
         {error ? (
-          <div className="mt-[10px] font-ui text-[12px] font-medium text-[#F0603F]">
-            {error}
-          </div>
+          <div className="mt-[10px] font-num text-[11px] text-[#e8eaec]">{error}</div>
         ) : null}
 
-        <div className="mt-[16px] flex gap-[8px]">
+        <div className="mt-4 flex items-center gap-[14px]">
           <button
             onClick={handleSave}
-            className="h-[46px] flex-[1.7] rounded-ctl bg-accent font-ui text-[14px] font-bold text-white"
+            className="h-[50px] flex-1 rounded-[2px] bg-sig font-display text-[13px] font-semibold uppercase tracking-[.06em] text-[#0B0C0E]"
           >
-            Save
+            SAVE
           </button>
           <button
             onClick={onCancel}
-            className="h-[46px] flex-1 rounded-ctl border border-white/[.16] bg-transparent font-ui text-[14px] font-bold text-ink-high"
+            className="h-[50px] px-4 font-mono text-[11px] tracking-[.1em] text-[#7b828c]"
           >
-            Cancel
+            CANCEL
           </button>
         </div>
       </div>

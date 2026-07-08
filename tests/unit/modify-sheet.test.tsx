@@ -18,7 +18,7 @@ function setup() {
 test("empty title blocks save and shows inline error", () => {
   const { onSave } = setup();
   fireEvent.change(screen.getByLabelText("TITLE"), { target: { value: "  " } });
-  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  fireEvent.click(screen.getByRole("button", { name: "SAVE" }));
   expect(onSave).not.toHaveBeenCalled();
   expect(screen.getByText("Title is required.")).toBeInTheDocument();
 });
@@ -26,7 +26,7 @@ test("empty title blocks save and shows inline error", () => {
 test("non-positive distance blocks save and shows inline error", () => {
   const { onSave } = setup();
   fireEvent.change(screen.getByLabelText("DISTANCE (MI)"), { target: { value: "0" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  fireEvent.click(screen.getByRole("button", { name: "SAVE" }));
   expect(onSave).not.toHaveBeenCalled();
   expect(screen.getByText("Distance must be a positive number.")).toBeInTheDocument();
 });
@@ -35,7 +35,7 @@ test("valid edit calls onSave with the edited session", () => {
   const { onSave } = setup();
   fireEvent.change(screen.getByLabelText("TITLE"), { target: { value: "Easy shakeout" } });
   fireEvent.change(screen.getByLabelText("DISTANCE (MI)"), { target: { value: "3" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  fireEvent.click(screen.getByRole("button", { name: "SAVE" }));
   expect(onSave).toHaveBeenCalledTimes(1);
   const edited = onSave.mock.calls[0][0];
   expect(edited.title).toBe("Easy shakeout");
