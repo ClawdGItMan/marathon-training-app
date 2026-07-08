@@ -116,6 +116,7 @@ Single authenticated user (Supabase Auth), but all tables still carry `user_id` 
 - **No auto-applied plan changes** — ever. This is a product principle, not just scope.
 - No social features, no multi-user/coach-marketplace anything, no native iOS build, no animated exercise media, no in-app image generation, no notifications beyond PWA push for the morning briefing (nice-to-have, may slip).
 - Predictions are informative, not prescriptive — the proposal engine keys off readiness/pain/load, not off chasing the predicted time.
+- Plan-tab surfacing of weekly proposals — Phase 3 (no proposal UI in #7a mock; weekly proposals decidable via Coach).
 
 ## 11. Error handling & edge cases
 

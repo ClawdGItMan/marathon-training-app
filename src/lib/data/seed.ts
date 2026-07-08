@@ -390,6 +390,19 @@ export const seed: Seed = {
   // Verbatim from design-v2 #7f (lines 486-509) per the R11 task brief — the
   // seeded transcript copy is the canonical source, not a paraphrase.
   coachThread: [
+    // Morning briefing (spec §4/§5/§11: weekly proposals are "surfaced in
+    // Plan and in the Coach briefing"; "briefing lists all open proposals").
+    // proposal-2 (move long run to Saturday) has no Plan-tab UI in the #7a
+    // mock — Coach is its only decision surface. Composed of the same
+    // idioms as msg-3 below: a mono COACH block whose proposalRefs render
+    // the shared ProposedSwapBox inline.
+    {
+      id: "msg-0",
+      role: "coach",
+      time: "6:41",
+      text: "Morning briefing: rain's forecast for Sunday, so here's one open proposal for this week before we get going.",
+      proposalRefs: ["proposal-2"],
+    },
     {
       id: "msg-1",
       role: "coach",
