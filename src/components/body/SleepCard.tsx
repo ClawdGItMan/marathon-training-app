@@ -1,6 +1,15 @@
 import { SleepStagesBar } from "@/components/charts/SleepStagesBar";
 import { formatHM } from "@/lib/format";
 
+/**
+ * SLEEP body per design #7c (lines ~281-292). The header's right side reads
+ * as a single "EFFICIENCY 88%" phrase in the mock, but is split into two
+ * spans here (regression guard: efficiencyPct, 88, must be independently
+ * queryable and distinct from the Today ring's sleepScorePct, 78 — see
+ * tests/unit/body.test.tsx). Rendered manually (not via SectionHeader/
+ * Section's `header` prop, which only accepts a single context string) so
+ * BodyScreen wraps this in a headerless <Section>.
+ */
 export function SleepCard({
   durationMin,
   needMin,
@@ -17,24 +26,24 @@ export function SleepCard({
   lightMin: number;
 }) {
   return (
-    <div className="mx-4 rounded-card border border-white/[.05] bg-[#171c23] p-[15px_15px] shadow-[0_1px_0_rgba(255,255,255,.03)_inset,0_10px_26px_-16px_rgba(0,0,0,.55)]">
-      <div className="flex items-end justify-between">
-        <div className="flex items-baseline gap-2">
-          <span className="font-num text-[26px] tracking-[-.01em] text-white">
-            {formatHM(durationMin)}
-          </span>
-          <span className="font-ui text-[12px] font-semibold text-[#8a919c]">
-            of {formatHM(needMin)} need
-          </span>
-        </div>
-        <div className="text-right">
-          <div className="font-ui text-[9px] font-bold tracking-[.1em] text-[#7b828c]">
-            EFFICIENCY
-          </div>
-          <div className="mt-[2px] font-num text-[16px] text-white">{efficiencyPct}%</div>
-        </div>
+    <div className="pb-[16px]">
+      <div className="flex items-baseline justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-[.18em] text-[#9aa0a7]">
+          SLEEP
+        </span>
+        <span className="whitespace-nowrap font-mono text-[9px] tracking-[.1em] text-[#5c6168]">
+          <span>EFFICIENCY</span> <span>{efficiencyPct}%</span>
+        </span>
       </div>
-      <div className="mt-[13px]">
+      <div className="mt-[10px] flex items-baseline gap-2">
+        <span className="font-num text-[22px] tracking-[-.01em] text-white [font-variant-numeric:tabular-nums]">
+          {formatHM(durationMin)}
+        </span>
+        <span className="font-mono text-[9px] tracking-[.12em] text-[#5c6168]">
+          OF {formatHM(needMin)} NEED
+        </span>
+      </div>
+      <div className="mt-3">
         <SleepStagesBar deepMin={deepMin} remMin={remMin} lightMin={lightMin} needMin={needMin} />
       </div>
     </div>

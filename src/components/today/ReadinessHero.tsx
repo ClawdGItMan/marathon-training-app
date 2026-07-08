@@ -1,11 +1,6 @@
 import { RingGauge } from "@/components/charts/RingGauge";
+import { recoveryBand } from "@/lib/format";
 import type { RecoverySnapshot } from "@/lib/domain/types";
-
-function band(pct: number): string {
-  if (pct >= 80) return "HIGH";
-  if (pct >= 60) return "MODERATE";
-  return "LOW";
-}
 
 /**
  * Readiness hero, ported from design-v2 #7c: 96px thin ring (stroke 2,
@@ -30,7 +25,7 @@ export function ReadinessHero({ recovery }: { recovery: RecoverySnapshot }) {
       </RingGauge>
       <div className="flex-1">
         <div className="whitespace-nowrap font-mono text-[9.5px] tracking-[.16em] text-[#9aa0a7]">
-          {band(recovery.recoveryPct)} · {deltaLabel}
+          {recoveryBand(recovery.recoveryPct)} · {deltaLabel}
         </div>
         {/* Guidance copy per #7c readiness hero (static seed-phase copy). */}
         <div className="mt-[7px] font-display text-[16px] leading-[1.3] text-white">

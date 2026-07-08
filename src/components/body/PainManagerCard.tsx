@@ -6,6 +6,13 @@ import { BODY_MAP_AREAS, BodyMap } from "@/components/body/BodyMap";
 import { PainAreaRow } from "@/components/body/PainAreaRow";
 import type { PainArea } from "@/lib/domain/types";
 
+/**
+ * PAIN & INJURIES body — carried feature with no v2 mock (spec §3), composed
+ * from Instrument patterns: body-map figure (greys, lime hotspots), ruled
+ * per-area rows, and a hairline ghost button (the LOG/COACH chip style from
+ * design-v2 #7d/#7e, e.g. "ACHILLES · R" / "WHY THIS WORKOUT?") rather than
+ * the lime-filled CTA — this action isn't the page's primary "now/act".
+ */
 export function PainManagerCard({ pains }: { pains: PainArea[] }) {
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
 
@@ -13,8 +20,8 @@ export function PainManagerCard({ pains }: { pains: PainArea[] }) {
   const selectedPain = pains.find((p) => p.id === selectedAreaId);
 
   return (
-    <div className="mx-4 rounded-card border border-white/[.05] bg-[#171c23] p-[14px_15px_15px] shadow-[0_1px_0_rgba(255,255,255,.03)_inset,0_10px_26px_-16px_rgba(0,0,0,.55)]">
-      <div className="mb-[2px] font-ui text-[11px] font-normal leading-[1.5] text-[#8a919c]">
+    <div className="pb-[16px]">
+      <div className="mt-[12px] font-num text-[11px] leading-[1.5] text-[#8a919c]">
         Tap an area to log soreness or an injury.
       </div>
 
@@ -25,22 +32,22 @@ export function PainManagerCard({ pains }: { pains: PainArea[] }) {
         onSelect={setSelectedAreaId}
       />
 
-      <div className="my-[6px] mb-3 h-px bg-white/[.06]" />
-
-      {pains.map((area, i) => (
-        <PainAreaRow
-          key={area.id}
-          area={area}
-          selected={area.id === selectedPain?.id}
-          divider={i > 0}
-        />
-      ))}
+      <div className="hairline-top mb-3 pt-3">
+        {pains.map((area, i) => (
+          <PainAreaRow
+            key={area.id}
+            area={area}
+            selected={area.id === selectedPain?.id}
+            divider={i > 0}
+          />
+        ))}
+      </div>
 
       <Link
         href="/log?focus=pain"
-        className="mt-[14px] flex h-11 w-full items-center justify-center rounded-ctl border border-[rgba(255,154,61,.35)] bg-[rgba(255,154,61,.10)] font-ui text-[13px] font-bold text-[#FF9A3D]"
+        className="flex h-[46px] w-full items-center justify-center rounded-[2px] border border-[var(--hair)] font-mono text-[10px] tracking-[.1em] text-[#9aa0a7]"
       >
-        + Log soreness or injury
+        + LOG SORENESS OR INJURY
       </Link>
     </div>
   );

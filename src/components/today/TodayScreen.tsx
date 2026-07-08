@@ -18,6 +18,7 @@ import { GlanceLines } from "@/components/today/GlanceLines";
 import { ReadinessHero } from "@/components/today/ReadinessHero";
 import { RecommendationBox } from "@/components/today/RecommendationBox";
 import { SessionRows } from "@/components/today/SessionRows";
+import { formatDayContext } from "@/lib/format";
 
 type TodayState = {
   goal: RaceGoal;
@@ -45,14 +46,6 @@ async function loadTodayState(): Promise<TodayState> {
   const fullPrediction = predictions.find((p) => p.distance === "FULL");
 
   return { goal, recovery, block, todaySession, dayProposal, fullPrediction };
-}
-
-/** "2026-07-01" → "WED · JUL 1" (page-header date context). */
-function formatDayContext(iso: string): string {
-  const date = new Date(`${iso}T00:00:00`);
-  const weekday = date.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
-  const month = date.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
-  return `${weekday} · ${month} ${date.getDate()}`;
 }
 
 export function TodayScreen() {

@@ -2,8 +2,11 @@ import { DotTrendChart, type DotTrendPoint } from "@/components/charts/DotTrendC
 
 const X_START = 10;
 const X_END = 340;
-const Y_TOP = 20;
-const Y_BOTTOM = 60;
+// Design #7c RECOVERY · 7 DAYS viewBox is 348x56 (not the chart's 92px
+// default) — headroom matches the mock's ~14-38 point spread within that box.
+const CHART_HEIGHT = 56;
+const Y_TOP = 14;
+const Y_BOTTOM = 40;
 
 function toChartPoints(values: number[]): DotTrendPoint[] {
   const min = Math.min(...values);
@@ -19,12 +22,19 @@ function toChartPoints(values: number[]): DotTrendPoint[] {
   }));
 }
 
+/**
+ * RECOVERY · 7 DAYS body per design #7c (lines ~294-302): grey dot-trend
+ * line with a lime "today" endpoint over a mid-height hairline, closed with
+ * a hairline rule (pb-16 here; Section supplies the rule itself).
+ */
 export function Recovery7dCard({ recoveryPct7d }: { recoveryPct7d: number[] }) {
   const points = toChartPoints(recoveryPct7d);
 
   return (
-    <div className="mx-4 rounded-card border border-white/[.05] bg-[#171c23] p-[14px_14px_10px] shadow-[0_1px_0_rgba(255,255,255,.03)_inset,0_10px_26px_-16px_rgba(0,0,0,.55)]">
-      <DotTrendChart points={points} goodThreshold={67} />
+    <div className="pb-[14px]">
+      <div className="mt-[12px]">
+        <DotTrendChart points={points} height={CHART_HEIGHT} />
+      </div>
     </div>
   );
 }

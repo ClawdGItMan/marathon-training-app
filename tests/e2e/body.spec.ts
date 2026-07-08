@@ -11,7 +11,7 @@ test.describe("Body screen — recovery + pain manager", () => {
   test("Log soreness or injury button navigates to /log?focus=pain", async ({ page }) => {
     await page.goto("/body");
 
-    await page.getByText("+ Log soreness or injury").click();
+    await page.getByText("+ LOG SORENESS OR INJURY").click();
 
     await expect(page).toHaveURL(/\/log\?focus=pain/);
   });

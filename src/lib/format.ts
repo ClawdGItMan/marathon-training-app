@@ -21,3 +21,16 @@ export function formatDeltaMSS(deltaSec: number): string {
   const sign = deltaSec < 0 ? "−" : "+";
   return `${sign}${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, "0")}`;
 }
+/** "2026-07-01" → "WED · JUL 1" (page-header date context, design #7c). */
+export function formatDayContext(iso: string): string {
+  const date = new Date(`${iso}T00:00:00`);
+  const weekday = date.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+  const month = date.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
+  return `${weekday} · ${month} ${date.getDate()}`;
+}
+/** 62 → "MODERATE" (recovery-score band, design #7c hero: MODERATE · ↓9). */
+export function recoveryBand(pct: number): string {
+  if (pct >= 80) return "HIGH";
+  if (pct >= 60) return "MODERATE";
+  return "LOW";
+}

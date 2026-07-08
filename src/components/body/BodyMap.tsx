@@ -46,8 +46,8 @@ export function BodyMap({
             if (isActiveArea) {
               return (
                 <g key={area.id}>
-                  <circle cx={area.cx} cy={area.cy} r={8} fill="rgba(255,154,61,.22)" />
-                  <circle cx={area.cx} cy={area.cy} r={4} fill="#FF9A3D" />
+                  <circle cx={area.cx} cy={area.cy} r={8} fill="rgba(201,245,63,.22)" />
+                  <circle cx={area.cx} cy={area.cy} r={4} fill="#C9F53F" />
                 </g>
               );
             }
