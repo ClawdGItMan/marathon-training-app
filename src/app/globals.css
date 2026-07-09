@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-display: var(--font-space);
+  --font-mono: var(--font-geist-mono);
+  --font-num: var(--font-geist);
+}
+
+/*
+ * Instrument design tokens.
+ * Text-grey step mapping (design README §Color, white → disabled/ghost):
+ *   ink-1 #fff     — emphasis
+ *   ink-2 #e8eaec
+ *   ink-3 #c3c8ce
+ *   ink-4 #9aa0a7
+ *   ink-5 #8a919c
+ *   ink-6 #6f757d
+ *   ink-7 #5c6168
+ *   ink-8 #3f444b  — disabled/ghost
+ */
+@theme {
+  --color-sig: #C9F53F;
+  --color-bg: #0B0C0E;
+
+  --color-ink-1: #fff;
+  --color-ink-2: #e8eaec;
+  --color-ink-3: #c3c8ce;
+  --color-ink-4: #9aa0a7;
+  --color-ink-5: #8a919c;
+  --color-ink-6: #6f757d;
+  --color-ink-7: #5c6168;
+  --color-ink-8: #3f444b;
+
+  --color-chart-1: #242930;
+  --color-chart-2: #2d333b;
+  --color-chart-3: #363d46;
+  --color-chart-line: #565b62;
+  --color-seg-empty: #22262c;
+
+  --radius-card: 2px;
+  --radius-ctl: 2px;
+}
+
+:root {
+  --hair: rgba(255, 255, 255, .09);
+}
+
+@layer utilities {
+  .hairline {
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .hairline-top {
+    border-top: 1px solid var(--hair);
+  }
+
+  .hairline-r {
+    border-right: 1px solid var(--hair);
+  }
+}
+
+body {
+  background-color: #0B0C0E;
+}
+
+@keyframes area-wipe {
+  to { clip-path: inset(0 0 0 0); }
+}
+
+/* Instrument chart motion (design-v2 Daily Screen Directions):
+ * limePulse — "live now" dots; barUp — periodization rise-in;
+ * drw — line dash draw-in; segIn — delayed element fade-in. */
+@keyframes limePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+
+@keyframes barUp {
+  from { transform: scaleY(.25); opacity: 0; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+
+@keyframes drw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes segIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Elements animated declaratively (inline animation shorthand) opt in via
+ * data-anim; reduced-motion users get the final frame immediately.
+ * stroke-dashoffset: 0 lands dash draw-ins on their fully-drawn state
+ * (harmless for non-SVG elements). */
+@media (prefers-reduced-motion: reduce) {
+  [data-anim] {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+}

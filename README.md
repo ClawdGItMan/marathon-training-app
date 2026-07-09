@@ -3,6 +3,17 @@
 ## Overview
 A dark, editorial-styled running/marathon training app. This bundle documents the full set of core screens — **Progress, Recovery, Plan, Log, Strength**, a **Daily** home screen, and the headline feature: a **Runna-inspired Workout Detail** view (session structure breakdown + AI-suggested alternative). The visual system is calm and text-forward: near-black backgrounds, one structural accent, per-session-type accent colors, generously rounded cards, and a background-free tab bar.
 
+## Development
+
+> **This entire document describes the original v1 design system (Archivo font, `#3866e0` accent, rounded cards) and is superseded.** The app now implements the **"Instrument"** design system — near-black graphite, hairline rules instead of cards, one lime (`#C9F53F`) signal color, mono micro-labels, tabular numerals, a text-only tab bar. **`design-v2/` (`design-v2/README.md` + `design-v2/Daily Screen Directions.dc.html`) is the canonical design reference** for every screen; this root file is kept for historical/structural context only (interactions, state shape, data needs) — do not follow its color/typography tokens.
+
+Commands:
+- `npm run dev` — start the dev server (http://localhost:3000)
+- `npm run build` — production build
+- `npx tsc --noEmit` — type-check (strict)
+- `npx vitest run` — unit tests
+- `PLAYWRIGHT_TEST=1 npx playwright test` — e2e tests (stop any manually-running `npm run dev` first — without `PLAYWRIGHT_TEST=1` the dev overlay intercepts clicks and e2e tests flake)
+
 ## About the Design Files
 The file in this bundle (`Daily Screen Directions.dc.html`) is a **design reference created in HTML** — a prototype showing intended look and behavior, **not production code to copy directly**. It is authored as a "Design Component" and relies on the bundled `support.js` runtime only so it renders in a browser; **do not port `support.js`** or the `data-screen`/`<x-dc>` scaffolding into your app.
 
