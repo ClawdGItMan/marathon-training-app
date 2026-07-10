@@ -14,5 +14,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.supabase.test.{ts,tsx}"],
+    // Each *.supabase.test.ts file runs its own `supabase db reset` in
+    // beforeAll against the one shared local stack — running files
+    // concurrently would race two resets against the same database.
+    fileParallelism: false,
   },
 });
