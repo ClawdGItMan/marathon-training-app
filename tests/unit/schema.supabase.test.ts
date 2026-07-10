@@ -47,11 +47,14 @@ describe("schema + RLS (local Supabase stack)", () => {
     const anon = createClient(apiUrl, anonKey);
     for (const table of TABLES) {
       const { data, error } = await anon.from(table).select("*");
-      // Either RLS silently returns zero rows, or the request errors out
-      // (e.g. permission denied) — either way, no data ever leaks.
+      // Either table-level grant denied (42501 permission error) or RLS silently
+      // returns zero rows — either way, no data ever leaks to anon.
       if (error) {
+        // Permission denied or other error: data must be null
         expect(data).toBeNull();
+        expect(error.code).toBeTruthy(); // error should have a code
       } else {
+        // Grant allowed, RLS denied: empty result
         expect(data).toEqual([]);
       }
     }
@@ -88,9 +91,13 @@ describe("schema + RLS (local Supabase stack)", () => {
       password: TEST_USER_PASSWORD,
     });
     const { data, error } = await client.from("integration_tokens").select("*");
+    // integration_tokens has no grants to authenticated: either table-level denied
+    // (42501) or RLS policy denies (zero rows). Either way, no token leaks.
     if (error) {
       expect(data).toBeNull();
+      expect(error.code).toBeTruthy();
     } else {
+      // Should not reach here with the narrowed grants, but handle gracefully
       expect(data).toEqual([]);
     }
   });

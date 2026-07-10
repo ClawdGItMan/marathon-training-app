@@ -147,15 +147,47 @@ alter table integration_tokens enable row level security;
 -- auto-expose new public-schema tables to the Data API roles (see this
 -- project's supabase/config.toml, [api] `auto_expose_new_tables` comment) —
 -- without these grants every request gets a 42501 "permission denied"
--- before RLS is even evaluated. RLS above still governs per-row access for
--- anon/authenticated; service_role bypasses RLS entirely by Supabase
--- convention. integration_tokens intentionally has zero policies (see
--- above), so granting table-level access to anon/authenticated here does
--- NOT expose any rows to them — RLS still denies every row.
-grant usage on schema public to anon, authenticated, service_role;
-grant all on all tables in schema public to anon, authenticated, service_role;
-grant all on all sequences in schema public to anon, authenticated, service_role;
-grant all on all routines in schema public to anon, authenticated, service_role;
-alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
-alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
-alter default privileges in schema public grant all on routines to anon, authenticated, service_role;
+-- before RLS is even evaluated.
+--
+-- Defense-in-depth least-privilege grants:
+-- - anon: NO table grants (no pre-login access). usage on schema for stack compatibility.
+-- - authenticated: select, insert, update, delete ONLY (no truncate/references/trigger).
+-- - service_role: full access (bypasses RLS by Supabase convention).
+-- - integration_tokens: NO grants to authenticated (service-role only, RLS also denies).
+--
+-- RLS policies above still govern per-row access for anon/authenticated.
+
+-- Test: anon does NOT need schema usage (no pre-login table access)
+grant usage on schema public to authenticated, service_role;
+
+-- Authenticated: limited DML grants on all tables EXCEPT integration_tokens
+grant select, insert, update, delete on profiles to authenticated;
+grant select, insert, update, delete on goals to authenticated;
+grant select, insert, update, delete on blocks to authenticated;
+grant select, insert, update, delete on planned_sessions to authenticated;
+grant select, insert, update, delete on proposals to authenticated;
+grant select, insert, update, delete on pain_areas to authenticated;
+grant select, insert, update, delete on pain_logs to authenticated;
+grant select, insert, update, delete on recovery_snapshots to authenticated;
+grant select, insert, update, delete on activities to authenticated;
+grant select, insert, update, delete on run_logs to authenticated;
+grant select, insert, update, delete on chat_messages to authenticated;
+grant select, insert, update, delete on sync_runs to authenticated;
+
+-- Service-role: full access (bypasses RLS)
+grant all on all tables in schema public to service_role;
+grant all on all sequences in schema public to service_role;
+grant all on all routines in schema public to service_role;
+
+-- Sequences: grant to authenticated and service_role
+grant usage, select on all sequences in schema public to authenticated;
+grant all on all routines in schema public to authenticated;
+
+-- Routines: already granted above for authenticated; service_role has all
+
+alter default privileges in schema public grant select, insert, update, delete on tables to authenticated;
+alter default privileges in schema public grant usage, select on sequences to authenticated;
+alter default privileges in schema public grant all on routines to authenticated;
+alter default privileges in schema public grant all on tables to service_role;
+alter default privileges in schema public grant all on sequences to service_role;
+alter default privileges in schema public grant all on routines to service_role;
