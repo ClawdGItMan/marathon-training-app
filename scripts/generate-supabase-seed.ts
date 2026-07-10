@@ -41,6 +41,7 @@ import { seed } from "../src/lib/data/seed";
 import { TEST_USER_ID, TEST_USER_EMAIL, TEST_USER_PASSWORD } from "../tests/parity/constants";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { toChatMessageRow, toPainAreaRow, toPlannedSessionRow, toProposalRow } from "./lib/seed-rows";
 
 // ---- SQL literal helpers --------------------------------------------------
 
@@ -171,22 +172,21 @@ const blocksSql = insert(
 const plannedSessionsSql = insert(
   "public.planned_sessions",
   ["id", "user_id", "date", "title", "type", "detail", "structure", "status", "provenance", "payload"],
-  seed.week.map((session) => [
-    sqlStr(session.id),
-    sqlStr(TEST_USER_ID),
-    sqlStr(session.date),
-    sqlStr(session.title),
-    sqlStr(session.type),
-    sqlNullableStr(session.detail),
-    sqlJson(session.structure ?? []),
-    sqlStr(session.status),
-    sqlStr(session.provenance),
-    sqlJson({
-      distanceMi: session.distanceMi,
-      paceTarget: session.paceTarget,
-      zone: session.zone,
-    }),
-  ])
+  seed.week.map((session) => {
+    const row = toPlannedSessionRow(session, TEST_USER_ID);
+    return [
+      sqlStr(row.id),
+      sqlStr(row.user_id),
+      sqlStr(row.date),
+      sqlStr(row.title),
+      sqlStr(row.type),
+      sqlNullableStr(row.detail),
+      sqlJson(row.structure),
+      sqlStr(row.status),
+      sqlStr(row.provenance),
+      sqlJson(row.payload),
+    ];
+  })
 );
 
 // ---- proposals --------------------------------------------------------------
@@ -199,24 +199,17 @@ const plannedSessionsSql = insert(
 const proposalsSql = insert(
   "public.proposals",
   ["id", "user_id", "scope", "session_id", "status", "payload"],
-  seed.proposals.map((proposal) => [
-    sqlStr(proposal.id),
-    sqlStr(TEST_USER_ID),
-    sqlStr(proposal.scope),
-    sqlStr(proposal.targetSessionId),
-    sqlStr(proposal.status),
-    sqlJson({
-      headline: proposal.headline,
-      subhead: proposal.subhead,
-      rationale: proposal.rationale,
-      badge: proposal.badge,
-      before: proposal.before,
-      after: proposal.after,
-      drivers: proposal.drivers,
-      reviewedAt: proposal.reviewedAt,
-      chatHeadline: proposal.chatHeadline,
-    }),
-  ])
+  seed.proposals.map((proposal) => {
+    const row = toProposalRow(proposal, TEST_USER_ID);
+    return [
+      sqlStr(row.id),
+      sqlStr(row.user_id),
+      sqlStr(row.scope),
+      sqlStr(row.session_id),
+      sqlStr(row.status),
+      sqlJson(row.payload),
+    ];
+  })
 );
 
 // ---- pain_areas ---------------------------------------------------------
@@ -224,14 +217,17 @@ const proposalsSql = insert(
 const painAreasSql = insert(
   "public.pain_areas",
   ["id", "user_id", "name", "severity", "trend", "payload"],
-  seed.pains.map((pain) => [
-    sqlStr(pain.id),
-    sqlStr(TEST_USER_ID),
-    sqlStr(pain.name),
-    sqlNum(pain.severity),
-    sqlStr(pain.trend),
-    sqlJson({ side: pain.side, label: pain.label, trendDays: pain.trendDays }),
-  ])
+  seed.pains.map((pain) => {
+    const row = toPainAreaRow(pain, TEST_USER_ID);
+    return [
+      sqlStr(row.id),
+      sqlStr(row.user_id),
+      sqlStr(row.name),
+      sqlNum(row.severity),
+      sqlStr(row.trend),
+      sqlJson(row.payload),
+    ];
+  })
 );
 
 // ---- recovery_snapshots -----------------------------------------------------
@@ -297,16 +293,19 @@ const activitiesSql = insert(
 const chatMessagesSql = insert(
   "public.chat_messages",
   ["id", "user_id", "role", "body", "time_label", "proposal_refs", "seq", "payload"],
-  seed.coachThread.map((message, index) => [
-    sqlStr(message.id),
-    sqlStr(TEST_USER_ID),
-    sqlStr(message.role),
-    sqlStr(message.text),
-    sqlNullableStr(message.time),
-    message.proposalRefs ? sqlJson(message.proposalRefs) : "null",
-    sqlNum(index),
-    sqlJson({}),
-  ])
+  seed.coachThread.map((message, index) => {
+    const row = toChatMessageRow(message, index, TEST_USER_ID);
+    return [
+      sqlStr(row.id),
+      sqlStr(row.user_id),
+      sqlStr(row.role),
+      sqlStr(row.body),
+      sqlNullableStr(row.time_label),
+      row.proposal_refs ? sqlJson(row.proposal_refs) : "null",
+      sqlNum(row.seq),
+      sqlJson(row.payload),
+    ];
+  })
 );
 
 // ---- assemble ---------------------------------------------------------------

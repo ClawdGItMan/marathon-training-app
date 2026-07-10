@@ -45,6 +45,11 @@ import type { LogRunEntry, ProposalDecision, Repo, StrengthSession } from "@/lib
 
 const proposalDecisionArgSchema = z.enum(["accepted", "modified", "dismissed"]);
 
+// pain_areas.payload is jsonb — narrow the untyped Supabase read to a plain
+// string-keyed record via Zod (boundary validation) instead of an
+// unchecked `as` cast before spreading it back with an updated `label`.
+const jsonRecordSchema = z.record(z.string(), z.unknown());
+
 const logRunEntrySchema = z.object({
   sessionId: z.string().optional(),
   rpe: z.number(),
@@ -227,7 +232,7 @@ async function logPain(areaId: string, severity: number, note?: string): Promise
   const nextPayload =
     parsedNote === undefined
       ? area.payload
-      : { ...(area.payload as Record<string, unknown>), label: parsedNote };
+      : { ...jsonRecordSchema.parse(area.payload), label: parsedNote };
 
   const { error: updateError } = await client
     .from("pain_areas")

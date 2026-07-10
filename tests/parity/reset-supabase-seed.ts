@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { seed } from "@/lib/data/seed";
 import { TEST_USER_ID } from "./constants";
+import { toChatMessageRow, toPainAreaRow, toPlannedSessionRow, toProposalRow } from "../../scripts/lib/seed-rows";
 
 /**
  * Fast per-test reset for supabase-stack WRITE tests.
@@ -22,11 +23,12 @@ import { TEST_USER_ID } from "./constants";
  * so they're intentionally left untouched here — no write path in this task
  * touches them, so there's nothing to restore.
  *
- * NOTE: this duplicates row-shape knowledge already encoded in
- * scripts/generate-supabase-seed.ts (JS objects here vs. generated SQL
- * text there) rather than sharing a single builder — pragmatic given the
- * two call sites need different wire formats (supabase-js `.insert()` rows
- * vs. raw SQL literals). If `seed.ts`'s shape changes, keep both in sync.
+ * Row *shapes* (which seed fields go into which column vs. payload) are
+ * shared with scripts/generate-supabase-seed.ts via scripts/lib/seed-rows.ts
+ * — the two call sites still encode the wire format differently
+ * (supabase-js `.insert()` objects here vs. raw SQL literal text there),
+ * but both build the same row objects first, so a shape change in
+ * seed-rows.ts can't silently drift between the two.
  *
  * Requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to already
  * be set in process.env — every caller's beforeAll sets these from
@@ -53,71 +55,23 @@ export async function resetSupabaseSeed(): Promise<void> {
   await del("planned_sessions");
   await del("pain_areas");
 
-  const { error: sessionsError } = await admin.from("planned_sessions").insert(
-    seed.week.map((session) => ({
-      id: session.id,
-      user_id: TEST_USER_ID,
-      date: session.date,
-      title: session.title,
-      type: session.type,
-      detail: session.detail ?? null,
-      structure: session.structure ?? [],
-      status: session.status,
-      provenance: session.provenance,
-      payload: {
-        distanceMi: session.distanceMi,
-        paceTarget: session.paceTarget,
-        zone: session.zone,
-      },
-    }))
-  );
+  const { error: sessionsError } = await admin
+    .from("planned_sessions")
+    .insert(seed.week.map((session) => toPlannedSessionRow(session, TEST_USER_ID)));
   if (sessionsError) throw sessionsError;
 
-  const { error: proposalsError } = await admin.from("proposals").insert(
-    seed.proposals.map((proposal) => ({
-      id: proposal.id,
-      user_id: TEST_USER_ID,
-      scope: proposal.scope,
-      session_id: proposal.targetSessionId,
-      status: proposal.status,
-      payload: {
-        headline: proposal.headline,
-        subhead: proposal.subhead,
-        rationale: proposal.rationale,
-        badge: proposal.badge,
-        before: proposal.before,
-        after: proposal.after,
-        drivers: proposal.drivers,
-        reviewedAt: proposal.reviewedAt,
-        chatHeadline: proposal.chatHeadline,
-      },
-    }))
-  );
+  const { error: proposalsError } = await admin
+    .from("proposals")
+    .insert(seed.proposals.map((proposal) => toProposalRow(proposal, TEST_USER_ID)));
   if (proposalsError) throw proposalsError;
 
-  const { error: painsError } = await admin.from("pain_areas").insert(
-    seed.pains.map((pain) => ({
-      id: pain.id,
-      user_id: TEST_USER_ID,
-      name: pain.name,
-      severity: pain.severity,
-      trend: pain.trend,
-      payload: { side: pain.side, label: pain.label, trendDays: pain.trendDays },
-    }))
-  );
+  const { error: painsError } = await admin
+    .from("pain_areas")
+    .insert(seed.pains.map((pain) => toPainAreaRow(pain, TEST_USER_ID)));
   if (painsError) throw painsError;
 
-  const { error: chatError } = await admin.from("chat_messages").insert(
-    seed.coachThread.map((message, index) => ({
-      id: message.id,
-      user_id: TEST_USER_ID,
-      role: message.role,
-      body: message.text,
-      time_label: message.time ?? null,
-      proposal_refs: message.proposalRefs ?? null,
-      seq: index,
-      payload: {},
-    }))
-  );
+  const { error: chatError } = await admin
+    .from("chat_messages")
+    .insert(seed.coachThread.map((message, index) => toChatMessageRow(message, index, TEST_USER_ID)));
   if (chatError) throw chatError;
 }
