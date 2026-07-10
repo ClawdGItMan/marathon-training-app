@@ -47,13 +47,17 @@ async function getBlock(): Promise<TrainingBlock> {
 }
 
 async function getRecovery7d(): Promise<RecoverySnapshot[]> {
+  // Order descending + limit 7 to get the most recent 7 rows (not the
+  // oldest 7 — matters once more than 7 rows exist, e.g. after Phase-3
+  // Whoop sync), then reverse to ascending so `.at(-1)` is latest, matching
+  // localRepo's `seed.recovery.slice(-7)` contract.
   const { data, error } = await getBrowserClient()
     .from("recovery_snapshots")
     .select("*")
-    .order("day", { ascending: true })
+    .order("day", { ascending: false })
     .limit(7);
   if (error) throw error;
-  return data.map(rowToRecovery);
+  return data.map(rowToRecovery).reverse();
 }
 
 async function getLatestRecovery(): Promise<RecoverySnapshot> {
