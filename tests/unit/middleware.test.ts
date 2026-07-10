@@ -1,109 +1,142 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+// @vitest-environment node
+import { NextRequest } from "next/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Unit tests for middleware auth cookie propagation and API route exclusion.
+ * Behavioral tests for src/middleware.ts.
  *
- * NOTE: Full middleware tests require mocking Next.js internals (NextRequest, cookies API).
- * These tests focus on:
- * 1. Verifying the matcher pattern correctly excludes /api routes
- * 2. Verifying the code structure copies cookies to all redirect responses
- *
- * End-to-end auth behavior (session refresh, signOut, redirects) is covered by:
- * - tests/e2e/auth.spec.ts (Playwright, local mode)
- * - Manual smoke testing against supabase mode (curl with live Supabase session)
+ * These import the real `middleware` and `config` exports and mock only
+ * `@supabase/ssr`'s `createServerClient`, capturing the `cookies.setAll`
+ * callback the middleware wires up so tests can simulate Supabase mutating
+ * cookies (token refresh, signOut) exactly as it would in production. This
+ * is what lets these tests fail if the cookie-copy-to-redirect-response
+ * loops in the middleware are removed or broken (see the RED-evidence run
+ * documented in .superpowers/sdd/task-2-report.md).
  */
 
-describe("middleware matcher excludes /api routes", () => {
-  it("matcher pattern should exclude api from auth checks", () => {
-    // The matcher pattern in src/middleware.ts config is:
-    // /((?!api|_next/static|_next/image|favicon.ico|icons|manifest.json).*)/
-    // This is a negative lookahead that matches all paths EXCEPT those starting with
-    // the excluded prefixes.
+type CookieToSet = {
+  name: string;
+  value: string;
+  options?: Record<string, unknown>;
+};
 
-    // Pattern test: paths that SHOULD match (require auth middleware)
-    const shouldMatch = ["/today", "/sign-in", "/dashboard", "/planning"];
+type SupabaseClientOpts = {
+  cookies: { setAll: (cookies: CookieToSet[]) => void };
+};
 
-    // Pattern test: paths that should NOT match (pass through untouched)
-    const shouldNotMatch = [
-      "/api/webhooks/strava", // API endpoint
-      "/api/cron/morning", // Cron endpoint
-      "/_next/static/chunk.js", // Next.js static assets
-      "/_next/image?url=...", // Next.js image optimization
-      "/favicon.ico", // Favicon
-      "/icons/logo.svg", // Icon asset
-      "/manifest.json", // PWA manifest
-    ];
+const { createServerClientMock } = vi.hoisted(() => ({
+  createServerClientMock: vi.fn(),
+}));
 
-    // Simplified matcher: the key point is that "api" must be in the negative lookahead
-    // For actual route matching, Next.js uses its own matcher compiler, but we can verify
-    // the pattern string contains the api exclusion.
+vi.mock("@supabase/ssr", () => ({
+  createServerClient: createServerClientMock,
+}));
 
-    // Read middleware config to verify it includes api exclusion
-    const matcherPattern = "/((?!api|_next/static|_next/image|favicon.ico|icons|manifest.json).*)";
+const { config, middleware } = await import("@/middleware");
 
-    // The pattern must include 'api' in the negative lookahead
-    expect(matcherPattern).toContain("(?!api");
-    expect(matcherPattern).toContain("_next/static");
-    expect(matcherPattern).toContain("favicon.ico");
+/**
+ * Wires the mocked createServerClient to return a fake Supabase client whose
+ * auth methods are supplied by the caller, and captures the `setAll` cookie
+ * callback so a test can simulate Supabase writing cookies mid-request.
+ */
+function mockSupabaseClient(overrides: {
+  getUser: () => Promise<{ data: { user: { email: string } | null } }>;
+  signOut?: () => Promise<{ error: null }>;
+}) {
+  const state: { setAll?: (cookies: CookieToSet[]) => void } = {};
+
+  createServerClientMock.mockImplementation((_url: string, _key: string, clientOpts: SupabaseClientOpts) => {
+    state.setAll = clientOpts.cookies.setAll;
+    return {
+      auth: {
+        getUser: overrides.getUser,
+        signOut: overrides.signOut ?? vi.fn().mockResolvedValue({ error: null }),
+      },
+    };
   });
 
-  it("should confirm /api/** paths are not processed by middleware", () => {
-    // This test documents the intent: API routes at /api/** should bypass
-    // the middleware's auth checks and implement their own auth (via route handlers
-    // or server actions with specific secrets/signatures).
+  return {
+    emitCookies: (cookies: CookieToSet[]) => state.setAll?.(cookies),
+  };
+}
 
-    // Verify the matcher string has the correct pattern:
-    const config = {
-      matcher: ["/((?!api|_next/static|_next/image|favicon.ico|icons|manifest.json).*)"],
-    };
+describe("middleware (supabase mode)", () => {
+  beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_REPO_MODE", "supabase");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example-project.supabase.co");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "dummy-anon-key");
+    vi.stubEnv("ALLOWED_EMAIL", "owner@example.com");
+  });
 
-    const matcherString = config.matcher[0];
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.clearAllMocks();
+  });
 
-    // The matcher must include 'api' to exclude it
-    expect(matcherString).toContain("api");
+  it("redirects a signed-in but disallowed email to /sign-in?e=denied and propagates the signOut cookie", async () => {
+    const supabase = mockSupabaseClient({
+      getUser: vi.fn().mockResolvedValue({ data: { user: { email: "intruder@x.com" } } }),
+      signOut: vi.fn().mockImplementation(async () => {
+        supabase.emitCookies([{ name: "sb-test-auth-token", value: "", options: { maxAge: 0 } }]);
+        return { error: null };
+      }),
+    });
 
-    // The pattern is a negative lookahead, so 'api' exclusion is part of the deny list
-    expect(matcherString).toContain("(?!api");
+    const request = new NextRequest("http://localhost:3000/today");
+    const response = await middleware(request);
 
-    // This ensures that requests to /api/* will not trigger the middleware
-    expect(matcherString).not.toContain("/api");
+    expect(response.status).toBe(307);
+    const location = response.headers.get("location");
+    expect(location).toContain("/sign-in");
+    expect(location).toContain("e=denied");
+
+    // This is the assertion that fails if the cookie-copy loop after
+    // signOut() is removed from the middleware (see RED-evidence run).
+    const cookie = response.cookies.get("sb-test-auth-token");
+    expect(cookie).toBeDefined();
+    expect(cookie?.value).toBe("");
+  });
+
+  it("redirects an unauthenticated request to /sign-in and propagates a token refreshed during getUser()", async () => {
+    const supabase = mockSupabaseClient({
+      getUser: vi.fn().mockImplementation(async () => {
+        supabase.emitCookies([{ name: "sb-test-auth-token", value: "refreshed", options: {} }]);
+        return { data: { user: null } };
+      }),
+    });
+
+    const request = new NextRequest("http://localhost:3000/today");
+    const response = await middleware(request);
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toContain("/sign-in");
+
+    const cookie = response.cookies.get("sb-test-auth-token");
+    expect(cookie).toBeDefined();
+    expect(cookie?.value).toBe("refreshed");
   });
 });
 
-describe("middleware cookie propagation logic", () => {
-  it("should document the cookie propagation pattern used in redirects", () => {
-    // The middleware now applies this pattern to ALL redirects:
-    //
-    //   const redirectResponse = NextResponse.redirect(url);
-    //   for (const cookie of response.cookies.getAll()) {
-    //     redirectResponse.cookies.set(cookie);
-    //   }
-    //   return redirectResponse;
-    //
-    // This ensures that any cookies mutated by the Supabase client
-    // (e.g., refreshed tokens, session deletion cookies) are carried
-    // through to the final response sent to the browser.
+describe("middleware (local mode)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.clearAllMocks();
+  });
 
-    // Three redirect scenarios apply this pattern:
-    const redirectScenarios = [
-      {
-        name: "unauthenticated user → /sign-in",
-        reason: "token refresh may have occurred in getUser()",
-      },
-      {
-        name: "denied email (failed allowlist) → /sign-in?e=denied",
-        reason: "signOut() mutates response with session deletion cookie",
-      },
-      {
-        name: "authenticated user on /sign-in → /today",
-        reason: "token refresh may have occurred in getUser()",
-      },
-    ];
+  it("is a no-op that never talks to Supabase", async () => {
+    vi.stubEnv("NEXT_PUBLIC_REPO_MODE", "local");
 
-    // Verify each scenario name (this is a documentation test)
-    expect(redirectScenarios).toHaveLength(3);
-    expect(redirectScenarios[0].name).toContain("unauthenticated");
-    expect(redirectScenarios[1].name).toContain("denied email");
-    expect(redirectScenarios[2].name).toContain("authenticated user");
+    const request = new NextRequest("http://localhost:3000/today");
+    const response = await middleware(request);
+
+    expect(response.status).not.toBe(307);
+    expect(createServerClientMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("middleware config", () => {
+  it("excludes /api routes from the matcher via a negative lookahead", () => {
+    expect(config.matcher).toHaveLength(1);
+    expect(config.matcher[0]).toContain("(?!api");
   });
 });
