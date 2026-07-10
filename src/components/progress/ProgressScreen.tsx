@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { localRepo } from "@/lib/data/local-repo";
+import { repo } from "@/lib/data";
 import { seed } from "@/lib/data/seed";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Section } from "@/components/ui/Section";
@@ -39,8 +39,8 @@ type ProgressState = {
 
 async function loadProgressState(): Promise<ProgressState> {
   const [goal, predictions] = await Promise.all([
-    localRepo.getGoal(),
-    localRepo.getPredictions(),
+    repo.getGoal(),
+    repo.getPredictions(),
   ]);
 
   return {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { localRepo } from "@/lib/data/local-repo";
+import { repo } from "@/lib/data";
 import type { RaceGoal } from "@/lib/domain/types";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Section } from "@/components/ui/Section";
@@ -26,7 +26,7 @@ export function SettingsScreen({ from }: { from?: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    localRepo.getGoal().then((next) => {
+    repo.getGoal().then((next) => {
       if (!cancelled) setGoal(next);
     });
     return () => {

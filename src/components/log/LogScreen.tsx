@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { localRepo } from "@/lib/data/local-repo";
+import { repo } from "@/lib/data";
 import { seed } from "@/lib/data/seed";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { ImportedRunSection } from "@/components/log/ImportedRunSection";
@@ -18,8 +18,8 @@ type LogState = {
 
 async function loadLogState(): Promise<LogState> {
   const [session, pains] = await Promise.all([
-    localRepo.getSession(seed.todaySessionId),
-    localRepo.getPains(),
+    repo.getSession(seed.todaySessionId),
+    repo.getPains(),
   ]);
   return { session, pains };
 }
@@ -29,7 +29,7 @@ const DEFAULT_RPE = 4;
 /**
  * Log tab (design #7d): AUTO-IMPORTED · STRAVA import card, RPE segment
  * meter, ANY PAIN? chip toggles + SEVERITY meter, SAVE LOG CTA. SAVE LOG
- * calls localRepo.logRun, which folds the pain override into the same
+ * calls repo.logRun, which folds the pain override into the same
  * overlay write as the run log (see repo.ts) — no separate logPain call is
  * needed — then navigates back to /today. The imported run itself comes
  * straight from seed.activities (static demo data, same pattern
@@ -71,7 +71,7 @@ export function LogScreen({ focusPain = false }: { focusPain?: boolean }) {
 
   const handleSave = useCallback(async () => {
     if (!state) return;
-    await localRepo.logRun({
+    await repo.logRun({
       sessionId: state.session.id,
       rpe,
       painAreaId: selectedPain ?? undefined,

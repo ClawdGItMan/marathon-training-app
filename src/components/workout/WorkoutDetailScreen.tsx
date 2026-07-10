@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { localRepo } from "@/lib/data/local-repo";
+import { repo } from "@/lib/data";
 import type { ProposalDecision } from "@/lib/data/repo";
 import type { PlannedSession, Proposal, TrainingBlock } from "@/lib/domain/types";
 import { WorkoutHeader } from "@/components/workout/WorkoutHeader";
@@ -18,9 +18,9 @@ type WorkoutState = {
 
 async function loadWorkoutState(id: string): Promise<WorkoutState> {
   const [session, block, proposals] = await Promise.all([
-    localRepo.getSession(id),
-    localRepo.getBlock(),
-    localRepo.getOpenProposals(),
+    repo.getSession(id),
+    repo.getBlock(),
+    repo.getOpenProposals(),
   ]);
   const proposal = proposals.find((p) => p.scope === "workout" && p.targetSessionId === id);
   return { session, block, proposal };
@@ -51,14 +51,14 @@ export function WorkoutDetailScreen({ sessionId, from }: { sessionId: string; fr
 
   const handleDecide = useCallback(
     async (proposalId: string, decision: ProposalDecision) => {
-      await localRepo.decideProposal(proposalId, decision);
+      await repo.decideProposal(proposalId, decision);
       await refresh();
     },
     [refresh]
   );
 
   const handleStart = useCallback(async () => {
-    await localRepo.startSession(sessionId);
+    await repo.startSession(sessionId);
     await refresh();
   }, [refresh, sessionId]);
 

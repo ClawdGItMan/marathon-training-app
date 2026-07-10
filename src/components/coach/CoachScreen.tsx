@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { localRepo } from "@/lib/data/local-repo";
+import { repo } from "@/lib/data";
 import type { ProposalDecision } from "@/lib/data/repo";
 import type { ChatMessage, Proposal, RecoverySnapshot, TrainingBlock } from "@/lib/domain/types";
 import { CoachHeader } from "@/components/coach/CoachHeader";
@@ -19,10 +19,10 @@ type CoachState = {
 
 async function loadCoachState(): Promise<CoachState> {
   const [recovery, block, thread, openProposals] = await Promise.all([
-    localRepo.getLatestRecovery(),
-    localRepo.getBlock(),
-    localRepo.getCoachThread(),
-    localRepo.getOpenProposals(),
+    repo.getLatestRecovery(),
+    repo.getBlock(),
+    repo.getCoachThread(),
+    repo.getOpenProposals(),
   ]);
   return { recovery, block, thread, openProposals };
 }
@@ -54,7 +54,7 @@ export function CoachScreen({ from }: { from?: string }) {
 
   const handleDecide = useCallback(
     async (proposalId: string, decision: ProposalDecision) => {
-      await localRepo.decideProposal(proposalId, decision);
+      await repo.decideProposal(proposalId, decision);
       await refresh();
     },
     [refresh]
@@ -64,8 +64,8 @@ export function CoachScreen({ from }: { from?: string }) {
     async (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
-      await localRepo.appendChat({ id: crypto.randomUUID(), role: "user", text: trimmed });
-      await localRepo.appendChat({
+      await repo.appendChat({ id: crypto.randomUUID(), role: "user", text: trimmed });
+      await repo.appendChat({
         id: crypto.randomUUID(),
         role: "coach",
         text: OFFLINE_REPLY,

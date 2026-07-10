@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { localRepo } from "@/lib/data/local-repo";
+import { repo } from "@/lib/data";
 import type { StrengthSession } from "@/lib/data/repo";
 import { seed } from "@/lib/data/seed";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -22,9 +22,9 @@ type PlanState = {
 
 async function loadPlanState(): Promise<PlanState> {
   const [block, week, strength] = await Promise.all([
-    localRepo.getBlock(),
-    localRepo.getWeekSessions(),
-    localRepo.getStrengthSession(),
+    repo.getBlock(),
+    repo.getWeekSessions(),
+    repo.getStrengthSession(),
   ]);
   return { block, week, strength };
 }

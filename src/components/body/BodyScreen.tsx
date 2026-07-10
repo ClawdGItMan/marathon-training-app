@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { localRepo } from "@/lib/data/local-repo";
+import { repo } from "@/lib/data";
 import type { PainArea, RecoverySnapshot } from "@/lib/domain/types";
 import { formatDayContext } from "@/lib/format";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -20,9 +20,9 @@ type BodyState = {
 
 async function loadBodyState(): Promise<BodyState> {
   const [recovery, recovery7d, pains] = await Promise.all([
-    localRepo.getLatestRecovery(),
-    localRepo.getRecovery7d(),
-    localRepo.getPains(),
+    repo.getLatestRecovery(),
+    repo.getRecovery7d(),
+    repo.getPains(),
   ]);
 
   return { recovery, recovery7d, pains };

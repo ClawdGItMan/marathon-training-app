@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { localRepo } from "@/lib/data/local-repo";
+import { repo } from "@/lib/data";
 import type { ProposalDecision } from "@/lib/data/repo";
 import type {
   PlannedSession,
@@ -31,12 +31,12 @@ type TodayState = {
 
 async function loadTodayState(): Promise<TodayState> {
   const [goal, recovery, block, week, proposals, predictions] = await Promise.all([
-    localRepo.getGoal(),
-    localRepo.getLatestRecovery(),
-    localRepo.getBlock(),
-    localRepo.getWeekSessions(),
-    localRepo.getOpenProposals(),
-    localRepo.getPredictions(),
+    repo.getGoal(),
+    repo.getLatestRecovery(),
+    repo.getBlock(),
+    repo.getWeekSessions(),
+    repo.getOpenProposals(),
+    repo.getPredictions(),
   ]);
 
   const todaySession = week.find((s) => s.date === recovery.date) ?? week[0];
@@ -65,7 +65,7 @@ export function TodayScreen() {
 
   const handleDecide = useCallback(
     async (proposalId: string, decision: ProposalDecision, edited?: PlannedSession) => {
-      await localRepo.decideProposal(proposalId, decision, edited);
+      await repo.decideProposal(proposalId, decision, edited);
       const next = await loadTodayState();
       setState(next);
     },
