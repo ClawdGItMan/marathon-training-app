@@ -13,21 +13,28 @@ import { execSync } from "node:child_process";
 import { beforeAll } from "vitest";
 import { TEST_USER_EMAIL, TEST_USER_PASSWORD } from "../parity/constants";
 import { runRepoParitySuite } from "../parity/repo-parity";
+import { resetSupabaseSeed } from "../parity/reset-supabase-seed";
+import { resetSupabaseStack } from "../parity/reset-supabase-stack";
 import { getBrowserClient } from "@/lib/supabase/browser";
 import { supabaseRepo } from "@/lib/data/supabase-repo";
 import type { Repo } from "@/lib/data/repo";
 
 /**
- * Runs the shared behavioral suite against supabaseRepo. Task 3 implements
- * READS only — every write method on supabaseRepo throws "not implemented
- * until task 4" — so this passes `{ supportsWrites: false }` to
- * runRepoParitySuite, which skips (does not delete) the write-dependent
- * describe block. Task 4 flips that back on once decideProposal et al. are
- * wired here.
+ * Runs the shared behavioral suite against supabaseRepo. Task 4 implements
+ * writes (decideProposal/startSession/logPain/logRun/appendChat, backed by
+ * the decide_proposal RPC + direct table mutations), so the write-dependent
+ * describe block now runs for real here too — Task 3 passed
+ * `{ supportsWrites: false }` since every write method threw
+ * "not implemented until task 4" back then; that option is dropped now
+ * (defaults to true).
  *
  * `supabase db reset` runs once per file in beforeAll (Task 1's stack, ports
- * shifted +1000 per supabase/config.toml). Reads-only this task means there
- * is nothing to clean up between tests, so `reset` below is a no-op.
+ * shifted +1000 per supabase/config.toml) to get a known-clean stack. Each
+ * individual test additionally runs `resetSupabaseSeed()` (see
+ * tests/parity/reset-supabase-seed.ts) — a fast service-role
+ * delete+reinsert of just the mutable tables — since the write block now
+ * mutates rows across tests and needs per-test isolation without paying
+ * `db reset`'s ~25s container-restart cost 25 times over.
  */
 
 function sleep(ms: number): Promise<void> {
@@ -35,11 +42,12 @@ function sleep(ms: number): Promise<void> {
 }
 
 beforeAll(async () => {
-  execSync("npx supabase db reset", { stdio: "inherit" });
+  resetSupabaseStack();
 
   const status = JSON.parse(execSync("npx supabase status -o json", { encoding: "utf8" }));
   process.env.NEXT_PUBLIC_SUPABASE_URL = status.API_URL;
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = status.ANON_KEY;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = status.SERVICE_ROLE_KEY;
 
   // `db reset` restarts the stack's containers as its last step; Docker
   // reports them "healthy" a beat before gotrue/postgrest are actually
@@ -70,7 +78,7 @@ async function makeRepo(): Promise<Repo> {
 }
 
 async function reset(): Promise<void> {
-  // no-op: reads-only this task, db reset already ran once per file above.
+  await resetSupabaseSeed();
 }
 
-runRepoParitySuite(makeRepo, reset, { supportsWrites: false });
+runRepoParitySuite(makeRepo, reset);
