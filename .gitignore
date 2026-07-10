@@ -3,6 +3,10 @@
 .tmp/
 node_modules/
 .env*
+!.env.example
+
+# supabase local stack
+supabase/.temp
 
 # dependencies
 /.pnp
