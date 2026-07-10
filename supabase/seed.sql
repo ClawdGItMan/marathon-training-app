@@ -40,11 +40,11 @@ insert into auth.identities (
 insert into public.profiles (id, email, home_timezone) values
   ('00000000-0000-0000-0000-000000000001', 'test@local.dev', 'America/New_York');
 
-insert into public.goals (id, user_id, name, date, target_seconds) values
-  ('goal-1', '00000000-0000-0000-0000-000000000001', 'Honolulu Marathon', '2026-12-13', 14400);
+insert into public.goals (id, user_id, name, date, target_seconds, payload) values
+  ('goal-1', '00000000-0000-0000-0000-000000000001', 'Honolulu Marathon', '2026-12-13', 14400, '{"predictedSec":14170,"daysOut":165,"streak":12}'::jsonb);
 
-insert into public.blocks (id, user_id, label, phase, week, total_weeks, periodization) values
-  ('block-1', '00000000-0000-0000-0000-000000000001', 'SUN · 12 MI', 'BUILD', 7, 16, '[{"phase":"base","mi":30},{"phase":"base","mi":33},{"phase":"base","mi":36},{"phase":"base","mi":38},{"phase":"build","mi":40},{"phase":"build","mi":43},{"phase":"build","mi":46},{"phase":"build","mi":44},{"phase":"peak","mi":48},{"phase":"peak","mi":50},{"phase":"peak","mi":52},{"phase":"peak","mi":49},{"phase":"taper","mi":44},{"phase":"taper","mi":38},{"phase":"taper","mi":32},{"phase":"taper","mi":26}]'::jsonb);
+insert into public.blocks (id, user_id, label, phase, week, total_weeks, periodization, payload) values
+  ('block-1', '00000000-0000-0000-0000-000000000001', 'SUN · 12 MI', 'BUILD', 7, 16, '[{"phase":"base","mi":30},{"phase":"base","mi":33},{"phase":"base","mi":36},{"phase":"base","mi":38},{"phase":"build","mi":40},{"phase":"build","mi":43},{"phase":"build","mi":46},{"phase":"build","mi":44},{"phase":"peak","mi":48},{"phase":"peak","mi":50},{"phase":"peak","mi":52},{"phase":"peak","mi":49},{"phase":"taper","mi":44},{"phase":"taper","mi":38},{"phase":"taper","mi":32},{"phase":"taper","mi":26}]'::jsonb, '{"number":2,"weekMilesDone":32,"weekMilesTarget":41}'::jsonb);
 
 insert into public.planned_sessions (id, user_id, date, title, type, detail, structure, status, provenance, payload) values
   ('mon-easy', '00000000-0000-0000-0000-000000000001', '2026-06-29', 'Easy run', 'easy', '4 mi · Zone 2', '[]'::jsonb, 'completed', 'original', '{"distanceMi":4,"zone":"Zone 2"}'::jsonb),
@@ -64,14 +64,14 @@ insert into public.pain_areas (id, user_id, name, severity, trend, payload) valu
   ('achilles-l', '00000000-0000-0000-0000-000000000001', 'Achilles', 2, 'improving', '{"side":"Left","label":"mild","trendDays":7}'::jsonb),
   ('calf-r', '00000000-0000-0000-0000-000000000001', 'Calf', 1, 'steady', '{"side":"Right","label":"tight","trendDays":3}'::jsonb);
 
-insert into public.recovery_snapshots (user_id, day, recovery_pct, hrv_ms, rhr, day_strain, sleep, source) values
-  ('00000000-0000-0000-0000-000000000001', '2026-06-25', 69, 55, 49, 1.05, '{"durationMin":430,"needMin":460,"efficiencyPct":91,"sleepScorePct":86,"deepMin":80,"remMin":95,"lightMin":255,"respRate":13.8}'::jsonb, 'whoop'),
-  ('00000000-0000-0000-0000-000000000001', '2026-06-26', 59, 51, 50, 1.12, '{"durationMin":405,"needMin":460,"efficiencyPct":87,"sleepScorePct":80,"deepMin":70,"remMin":88,"lightMin":247,"respRate":14}'::jsonb, 'whoop'),
-  ('00000000-0000-0000-0000-000000000001', '2026-06-27', 63, 53, 50, 1.1, '{"durationMin":420,"needMin":460,"efficiencyPct":89,"sleepScorePct":82,"deepMin":72,"remMin":90,"lightMin":258,"respRate":13.9}'::jsonb, 'whoop'),
-  ('00000000-0000-0000-0000-000000000001', '2026-06-28', 56, 50, 51, 1.18, '{"durationMin":390,"needMin":460,"efficiencyPct":85,"sleepScorePct":76,"deepMin":65,"remMin":82,"lightMin":243,"respRate":14.1}'::jsonb, 'whoop'),
-  ('00000000-0000-0000-0000-000000000001', '2026-06-29', 72, 56, 48, 0.95, '{"durationMin":445,"needMin":460,"efficiencyPct":93,"sleepScorePct":90,"deepMin":85,"remMin":100,"lightMin":260,"respRate":13.6}'::jsonb, 'whoop'),
-  ('00000000-0000-0000-0000-000000000001', '2026-06-30', 67, 54, 49, 1.08, '{"durationMin":415,"needMin":460,"efficiencyPct":90,"sleepScorePct":83,"deepMin":74,"remMin":92,"lightMin":249,"respRate":13.9}'::jsonb, 'whoop'),
-  ('00000000-0000-0000-0000-000000000001', '2026-07-01', 62, 48, 52, 1.28, '{"durationMin":372,"needMin":464,"efficiencyPct":88,"sleepScorePct":78,"deepMin":67,"remMin":85,"lightMin":188,"respRate":14.2}'::jsonb, 'whoop');
+insert into public.recovery_snapshots (user_id, day, recovery_pct, hrv_ms, rhr, day_strain, sleep, source, payload) values
+  ('00000000-0000-0000-0000-000000000001', '2026-06-25', 69, 55, 49, 1.05, '{"durationMin":430,"needMin":460,"efficiencyPct":91,"sleepScorePct":86,"deepMin":80,"remMin":95,"lightMin":255,"respRate":13.8}'::jsonb, 'whoop', '{"recoveryDelta":4,"hrvDeltaPct":2,"rhrDelta":-1,"loadLabel":"moderate"}'::jsonb),
+  ('00000000-0000-0000-0000-000000000001', '2026-06-26', 59, 51, 50, 1.12, '{"durationMin":405,"needMin":460,"efficiencyPct":87,"sleepScorePct":80,"deepMin":70,"remMin":88,"lightMin":247,"respRate":14}'::jsonb, 'whoop', '{"recoveryDelta":-10,"hrvDeltaPct":-6,"rhrDelta":1,"loadLabel":"moderate"}'::jsonb),
+  ('00000000-0000-0000-0000-000000000001', '2026-06-27', 63, 53, 50, 1.1, '{"durationMin":420,"needMin":460,"efficiencyPct":89,"sleepScorePct":82,"deepMin":72,"remMin":90,"lightMin":258,"respRate":13.9}'::jsonb, 'whoop', '{"recoveryDelta":4,"hrvDeltaPct":-2,"rhrDelta":0,"loadLabel":"moderate"}'::jsonb),
+  ('00000000-0000-0000-0000-000000000001', '2026-06-28', 56, 50, 51, 1.18, '{"durationMin":390,"needMin":460,"efficiencyPct":85,"sleepScorePct":76,"deepMin":65,"remMin":82,"lightMin":243,"respRate":14.1}'::jsonb, 'whoop', '{"recoveryDelta":-7,"hrvDeltaPct":-8,"rhrDelta":1,"loadLabel":"elevated"}'::jsonb),
+  ('00000000-0000-0000-0000-000000000001', '2026-06-29', 72, 56, 48, 0.95, '{"durationMin":445,"needMin":460,"efficiencyPct":93,"sleepScorePct":90,"deepMin":85,"remMin":100,"lightMin":260,"respRate":13.6}'::jsonb, 'whoop', '{"recoveryDelta":16,"hrvDeltaPct":4,"rhrDelta":-3,"loadLabel":"moderate"}'::jsonb),
+  ('00000000-0000-0000-0000-000000000001', '2026-06-30', 67, 54, 49, 1.08, '{"durationMin":415,"needMin":460,"efficiencyPct":90,"sleepScorePct":83,"deepMin":74,"remMin":92,"lightMin":249,"respRate":13.9}'::jsonb, 'whoop', '{"recoveryDelta":-5,"hrvDeltaPct":-3,"rhrDelta":1,"loadLabel":"moderate"}'::jsonb),
+  ('00000000-0000-0000-0000-000000000001', '2026-07-01', 62, 48, 52, 1.28, '{"durationMin":372,"needMin":464,"efficiencyPct":88,"sleepScorePct":78,"deepMin":67,"remMin":85,"lightMin":188,"respRate":14.2}'::jsonb, 'whoop', '{"recoveryDelta":-9,"hrvDeltaPct":-12,"rhrDelta":3,"loadLabel":"elevated"}'::jsonb);
 
 insert into public.activities (user_id, sport, started_at, ended_at, distance_m, moving_sec, avg_pace_sec_per_mi, payload) values
   ('00000000-0000-0000-0000-000000000001', 'run', '2026-06-29T00:00:00Z', ('2026-06-29T00:00:00Z'::timestamptz + make_interval(secs => 2304)), 6437.376, 2304, 576, '{"id":"act-1","title":"Easy run · 4 mi","synced":true}'::jsonb);

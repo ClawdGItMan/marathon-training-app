@@ -12,26 +12,27 @@
  * that keeps the *generated SQL text* byte-identical across runs.
  *
  * Column mapping notes (see task-1-report.md "Seed round-trip notes" for
- * the full reasoning):
+ * the full reasoning, and task-3-report.md for the payload-columns
+ * amendment below):
  *  - Every domain field without a dedicated column is written verbatim into
  *    that table's `payload` jsonb column (planned_sessions, proposals,
  *    pain_areas, activities, chat_messages all have one).
- *  - `goals` and `blocks` have no payload column in the Task-1 DDL. Fields
- *    with nowhere to live (goal.predictedSec/daysOut/streak,
- *    block.number/weekMilesDone/weekMilesTarget) are intentionally NOT
- *    written here — the design spec marks predicted-time and plan-progress
- *    display content as "still seeded" / derived, not DB-of-record in
- *    Phase 2. See task-1-report.md for the full list and rationale.
- *  - `recovery_snapshots` has no payload column either. The delta/label
- *    fields (recoveryDelta, hrvDeltaPct, rhrDelta, loadLabel) are mechanical
- *    derivations from consecutive stored rows / day_strain thresholds, left
- *    for a later task's row-mapper. `respRate` has no dedicated column and
- *    no clean derivation, so it is folded into the existing `sleep` jsonb
- *    blob (a judgment call, not a schema change — flagged in the report).
+ *  - Task-3 amendment (migration 0002_payload_columns.sql): `goals`,
+ *    `blocks`, and `recovery_snapshots` originally had no payload column in
+ *    the Task-1 DDL, orphaning goal.predictedSec/daysOut/streak,
+ *    block.number/weekMilesDone/weekMilesTarget, and
+ *    recovery.recoveryDelta/hrvDeltaPct/rhrDelta/loadLabel. Migration 0002
+ *    adds `payload jsonb not null default '{}'` to all three tables and
+ *    this generator now writes those fields into it, so the row-mappers in
+ *    src/lib/data/row-mappers.ts can read them back.
+ *  - `respRate` (recovery) still has no dedicated column and no clean
+ *    derivation, so it stays folded into the existing `sleep` jsonb blob
+ *    (a judgment call, not a schema change — flagged in the Task-1 report).
  *  - `predictions`, `strength`, `mileage12wk`, `fitness90d`, `todaySessionId`
  *    have no table at all in the Task-1 DDL; the spec marks predictions and
  *    the plan's display content as still-seeded/derived in Phase 2, so
- *    they are skipped entirely here.
+ *    they are skipped entirely here (supabaseRepo reads them from the
+ *    static seed module directly — see src/lib/data/supabase-repo.ts).
  *  - `workoutDetail` reuses the same id as its `week[]` entry (wed-400s) —
  *    it is not inserted a second time.
  */
@@ -116,11 +117,11 @@ const profileSql = insert(
 );
 
 // ---- goals ------------------------------------------------------------------
-// Note: predictedSec/daysOut/streak intentionally not persisted — see header.
+// predictedSec/daysOut/streak have no dedicated column -> payload (0002).
 
 const goalsSql = insert(
   "public.goals",
-  ["id", "user_id", "name", "date", "target_seconds"],
+  ["id", "user_id", "name", "date", "target_seconds", "payload"],
   [
     [
       sqlStr("goal-1"),
@@ -128,19 +129,24 @@ const goalsSql = insert(
       sqlStr(seed.goal.name),
       sqlStr(seed.goal.date),
       sqlNum(seed.goal.goalSec),
+      sqlJson({
+        predictedSec: seed.goal.predictedSec,
+        daysOut: seed.goal.daysOut,
+        streak: seed.goal.streak,
+      }),
     ],
   ]
 );
 
 // ---- blocks -------------------------------------------------------------
-// Note: number/weekMilesDone/weekMilesTarget intentionally not persisted —
-// see header. `label` holds the block's long-run label (the one free-text
-// slot the table offers); `periodization` is the seed's top-level 16-week
+// number/weekMilesDone/weekMilesTarget have no dedicated column -> payload
+// (0002). `label` holds the block's long-run label (the one free-text slot
+// the table offers); `periodization` is the seed's top-level 16-week
 // bar-chart array, stored per-block since that's where the DDL puts it.
 
 const blocksSql = insert(
   "public.blocks",
-  ["id", "user_id", "label", "phase", "week", "total_weeks", "periodization"],
+  ["id", "user_id", "label", "phase", "week", "total_weeks", "periodization", "payload"],
   [
     [
       sqlStr("block-1"),
@@ -150,6 +156,11 @@ const blocksSql = insert(
       sqlNum(seed.block.week),
       sqlNum(seed.block.totalWeeks),
       sqlJson(seed.periodization),
+      sqlJson({
+        number: seed.block.number,
+        weekMilesDone: seed.block.weekMilesDone,
+        weekMilesTarget: seed.block.weekMilesTarget,
+      }),
     ],
   ]
 );
@@ -224,14 +235,14 @@ const painAreasSql = insert(
 );
 
 // ---- recovery_snapshots -----------------------------------------------------
-// recoveryDelta/hrvDeltaPct/rhrDelta/loadLabel are mechanical derivations
-// from consecutive rows / day_strain thresholds (left for a later task's
-// row-mapper). respRate has no dedicated column or payload column on this
-// table, so it is folded into the `sleep` jsonb blob rather than dropped.
+// recoveryDelta/hrvDeltaPct/rhrDelta/loadLabel have no dedicated column ->
+// payload (0002). respRate has no dedicated column or its own payload slot
+// on this table, so it stays folded into the `sleep` jsonb blob rather than
+// dropped.
 
 const recoverySnapshotsSql = insert(
   "public.recovery_snapshots",
-  ["user_id", "day", "recovery_pct", "hrv_ms", "rhr", "day_strain", "sleep", "source"],
+  ["user_id", "day", "recovery_pct", "hrv_ms", "rhr", "day_strain", "sleep", "source", "payload"],
   seed.recovery.map((snapshot) => [
     sqlStr(TEST_USER_ID),
     sqlStr(snapshot.date),
@@ -241,6 +252,12 @@ const recoverySnapshotsSql = insert(
     sqlNum(snapshot.load),
     sqlJson({ ...snapshot.sleep, respRate: snapshot.respRate }),
     sqlStr("whoop"),
+    sqlJson({
+      recoveryDelta: snapshot.recoveryDelta,
+      hrvDeltaPct: snapshot.hrvDeltaPct,
+      rhrDelta: snapshot.rhrDelta,
+      loadLabel: snapshot.loadLabel,
+    }),
   ])
 );
 
