@@ -50,7 +50,12 @@ export async function middleware(request: NextRequest) {
     if (isPublicPath) return response;
     const url = request.nextUrl.clone();
     url.pathname = "/sign-in";
-    return NextResponse.redirect(url);
+    const redirectResponse = NextResponse.redirect(url);
+    // Propagate any cookies mutated by the Supabase client (token refresh, etc.)
+    for (const cookie of response.cookies.getAll()) {
+      redirectResponse.cookies.set(cookie);
+    }
+    return redirectResponse;
   }
 
   if (!isAllowedEmail(user.email ?? "")) {
@@ -59,19 +64,29 @@ export async function middleware(request: NextRequest) {
     url.pathname = "/sign-in";
     url.search = "";
     url.searchParams.set("e", "denied");
-    return NextResponse.redirect(url);
+    const redirectResponse = NextResponse.redirect(url);
+    // Propagate any cookies mutated by signOut (session deletion cookie, etc.)
+    for (const cookie of response.cookies.getAll()) {
+      redirectResponse.cookies.set(cookie);
+    }
+    return redirectResponse;
   }
 
   if (isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/today";
     url.search = "";
-    return NextResponse.redirect(url);
+    const redirectResponse = NextResponse.redirect(url);
+    // Propagate any cookies mutated by the Supabase client (token refresh, etc.)
+    for (const cookie of response.cookies.getAll()) {
+      redirectResponse.cookies.set(cookie);
+    }
+    return redirectResponse;
   }
 
   return response;
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icons|manifest.json).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|icons|manifest.json).*)"],
 };
