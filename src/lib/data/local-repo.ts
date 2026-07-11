@@ -2,6 +2,7 @@ import { z } from "zod";
 import { seed } from "@/lib/data/seed";
 import { chatMessageSchema, sessionSchema } from "@/lib/domain/schemas";
 import type {
+  Activity,
   ChatMessage,
   PainArea,
   PlannedSession,
@@ -268,6 +269,19 @@ async function getPredictions(): Promise<Prediction[]> {
   return seed.predictions;
 }
 
+// Task 11: seed-derived, unchanged behavior — localRepo has no `activities`
+// table equivalent to sync against, so these simply expose the same
+// `seed.activities`/`seed.mileage12wk` values LogScreen/ProgressScreen read
+// directly today, now behind the Repo seam so supabaseRepo can compute real
+// values while localRepo's demo behavior stays byte-identical.
+async function getLatestActivity(): Promise<Activity | null> {
+  return seed.activities.at(-1) ?? null;
+}
+
+async function getMileage12wk(): Promise<number[]> {
+  return seed.mileage12wk;
+}
+
 async function getStrengthSession(): Promise<StrengthSession> {
   return seed.strength;
 }
@@ -315,4 +329,6 @@ export const localRepo: Repo = {
   getCoachThread,
   appendChat,
   logRun,
+  getLatestActivity,
+  getMileage12wk,
 };

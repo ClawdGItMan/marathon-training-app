@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Repo, StrengthSession } from "@/lib/data/repo";
 import {
+  activitySchema,
   raceGoalSchema,
   trainingBlockSchema,
   recoverySchema,
@@ -216,5 +217,11 @@ export function withOfflineCache(repo: Repo): Repo {
       read("getCoachThread", key("getCoachThread"), z.array(chatMessageSchema), () => repo.getCoachThread()),
     appendChat: (msg) => write("appendChat", () => repo.appendChat(msg)),
     logRun: (entry) => write("logRun", () => repo.logRun(entry)),
+    getLatestActivity: () =>
+      read("getLatestActivity", key("getLatestActivity"), activitySchema.nullable(), () =>
+        repo.getLatestActivity()
+      ),
+    getMileage12wk: () =>
+      read("getMileage12wk", key("getMileage12wk"), z.array(z.number()), () => repo.getMileage12wk()),
   };
 }

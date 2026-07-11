@@ -9,19 +9,21 @@ import { ImportedRunSection } from "@/components/log/ImportedRunSection";
 import { RpeSection } from "@/components/log/RpeSection";
 import { PainSection } from "@/components/log/PainSection";
 import { formatDayContext } from "@/lib/format";
-import type { PainArea, PlannedSession } from "@/lib/domain/types";
+import type { Activity, PainArea, PlannedSession } from "@/lib/domain/types";
 
 type LogState = {
   session: PlannedSession;
   pains: PainArea[];
+  activity: Activity | null;
 };
 
 async function loadLogState(): Promise<LogState> {
-  const [session, pains] = await Promise.all([
+  const [session, pains, activity] = await Promise.all([
     repo.getSession(seed.todaySessionId),
     repo.getPains(),
+    repo.getLatestActivity(),
   ]);
-  return { session, pains };
+  return { session, pains, activity };
 }
 
 const DEFAULT_RPE = 4;
@@ -31,9 +33,11 @@ const DEFAULT_RPE = 4;
  * meter, ANY PAIN? chip toggles + SEVERITY meter, SAVE LOG CTA. SAVE LOG
  * calls repo.logRun, which folds the pain override into the same
  * overlay write as the run log (see repo.ts) — no separate logPain call is
- * needed — then navigates back to /today. The imported run itself comes
- * straight from seed.activities (static demo data, same pattern
- * ProgressScreen uses for seed.mileage12wk) since Repo has no activity feed.
+ * needed — then navigates back to /today. The imported run comes from
+ * `repo.getLatestActivity()` (Task 11) — real once a Strava/Whoop activity
+ * has synced, with a seed fallback before any import has happened yet
+ * (localRepo always serves the seed value; supabaseRepo falls back only
+ * when `activities` has zero rows for this user).
  */
 export function LogScreen({ focusPain = false }: { focusPain?: boolean }) {
   const router = useRouter();
@@ -86,7 +90,7 @@ export function LogScreen({ focusPain = false }: { focusPain?: boolean }) {
   }, []);
 
   if (!state) return null;
-  const activity = seed.activities.at(-1);
+  const { activity } = state;
 
   return (
     <div className="pb-6">

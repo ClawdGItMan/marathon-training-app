@@ -32,6 +32,7 @@ const {
   assertState,
   deleteTokens,
   fetchWithAutoRefresh,
+  findUserByAthleteRef,
   getSessionUser,
   loadTokens,
   makeState,
@@ -251,6 +252,39 @@ describe("deleteTokens", () => {
     getAdminClientMock.mockReturnValue(admin);
 
     await expect(deleteTokens("user-123", "strava")).rejects.toBeTruthy();
+  });
+});
+
+describe("findUserByAthleteRef", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("resolves the userId whose integration_tokens row matches provider + athlete_ref", async () => {
+    const admin = makeAdminClientMock({ selectResult: { data: { user_id: "user-123" }, error: null } });
+    getAdminClientMock.mockReturnValue(admin);
+
+    const result = await findUserByAthleteRef("10129358", "strava");
+
+    expect(result).toBe("user-123");
+    expect(admin.from).toHaveBeenCalledWith("integration_tokens");
+    expect(admin.select).toHaveBeenCalledWith("user_id");
+    expect(admin.eq1).toHaveBeenCalledWith("provider", "strava");
+    expect(admin.eq2).toHaveBeenCalledWith("athlete_ref", "10129358");
+  });
+
+  it("returns null (not a throw) when no connected user matches the athlete ref", async () => {
+    const admin = makeAdminClientMock({ selectResult: { data: null, error: null } });
+    getAdminClientMock.mockReturnValue(admin);
+
+    expect(await findUserByAthleteRef("unknown-athlete", "strava")).toBeNull();
+  });
+
+  it("throws when the query errors", async () => {
+    const admin = makeAdminClientMock({ selectResult: { data: null, error: { message: "boom" } } });
+    getAdminClientMock.mockReturnValue(admin);
+
+    await expect(findUserByAthleteRef("10129358", "strava")).rejects.toBeTruthy();
   });
 });
 

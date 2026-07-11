@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  activitySchema,
   chatMessageSchema,
   painAreaSchema,
   proposalDriverSchema,
@@ -12,6 +13,7 @@ import {
   trainingBlockSchema,
 } from "@/lib/domain/schemas";
 import type {
+  Activity,
   ChatMessage,
   PainArea,
   PlannedSession,
@@ -252,6 +254,45 @@ export function rowToPainArea(row: unknown): PainArea {
     label: r.payload.label,
     trend: r.trend,
     trendDays: r.payload.trendDays,
+  });
+}
+
+// ---- activities -----------------------------------------------------------
+// Written by src/lib/integrations/strava/sync.ts's importStravaActivity
+// (Task 11) and src/lib/integrations/whoop/sync.ts's syncWhoop (Task 8) —
+// this mapper is exercised by both writers' round-trip guard tests. The
+// domain `Activity` type has no dedicated table columns for `title`/`synced`
+// (see supabase/migrations/0001_schema.sql — `activities` has no `title`
+// column at all), so `title` is folded into `payload.title` (falls back to
+// "Run" for a Whoop-only row, which never sets it) and `synced` is always
+// `true` — every row in this table came from a real Strava/Whoop import.
+// `date` is the row's `started_at` UTC calendar day (NOT a home-timezone
+// local day): this field isn't rendered anywhere today
+// (ImportedRunSection.tsx only reads title/distanceMi/timeSec/paceSecPerMi),
+// so a full tz-aware lookup here is unwarranted complexity — revisit if a
+// future screen needs a tz-correct display date.
+
+const METERS_PER_MILE = 1609.344;
+
+const activityRowSchema = z.object({
+  id: z.string(),
+  started_at: z.string(),
+  distance_m: z.number().nullable(),
+  moving_sec: z.number().nullable(),
+  avg_pace_sec_per_mi: z.number().nullable(),
+  payload: z.object({ title: z.string().optional() }).default({}),
+});
+
+export function rowToActivity(row: unknown): Activity {
+  const r = activityRowSchema.parse(row);
+  return activitySchema.parse({
+    id: r.id,
+    date: r.started_at.slice(0, 10),
+    title: r.payload.title ?? "Run",
+    distanceMi: (r.distance_m ?? 0) / METERS_PER_MILE,
+    timeSec: r.moving_sec ?? 0,
+    paceSecPerMi: r.avg_pace_sec_per_mi ?? 0,
+    synced: true,
   });
 }
 

@@ -3,10 +3,11 @@ import { z } from "zod";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { syncWhoop } from "@/lib/integrations/whoop/sync";
+import { syncStrava } from "@/lib/integrations/strava/sync";
 import { localHourOf } from "@/lib/sync/timezone";
 
 /**
- * Morning sync cron (Task 9). Scheduled hourly (`vercel.json`: `0 * * * *`)
+ * Morning sync cron (Task 9; Strava catch-up sweep added Task 11). Scheduled hourly (`vercel.json`: `0 * * * *`)
  * rather than once at a fixed UTC hour — a UTC-fixed daily schedule would
  * drift against every home timezone across DST transitions. Instead, this
  * handler runs every hour and no-ops unless the profile's LOCAL hour
@@ -62,10 +63,14 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
+    // Whoop first, Strava second: syncStrava's dedupe (via
+    // importStravaActivity -> dedupeWhoop) only merges a Strava activity
+    // into an ALREADY-STORED Whoop row, never the reverse — running Whoop
+    // first means the common catch-up-sweep case dedupes correctly in one
+    // cron pass. See src/lib/integrations/strava/sync.ts's module comment
+    // for the known one-directional-dedupe edge case this doesn't cover.
     await syncWhoop(admin, profile.id);
-    // TODO(strava-sweep task 11): sweep Strava activities here too, once
-    // Task 11 lands src/lib/integrations/strava/sync.ts. Task 11 MUST
-    // remove this marker when it does.
+    await syncStrava(admin, profile.id);
     results.push({ userId: profile.id, synced: true });
   }
 

@@ -3,8 +3,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getBrowserClient } from "@/lib/supabase/browser";
 import { markFallback } from "@/lib/data/offline-cache";
 import { seed } from "@/lib/data/seed";
+import { RUN_EQUIVALENT_SPORTS } from "@/lib/activities/dedupe";
 import { chatMessageSchema, sessionSchema } from "@/lib/domain/schemas";
 import {
+  rowToActivity,
   rowToBlock,
   rowToChatMessage,
   rowToGoal,
@@ -14,6 +16,7 @@ import {
   rowToSession,
 } from "@/lib/data/row-mappers";
 import type {
+  Activity,
   ChatMessage,
   PainArea,
   PlannedSession,
@@ -262,6 +265,93 @@ async function logPain(areaId: string, severity: number, note?: string): Promise
   if (updateError) throw updateError;
 }
 
+// ---- activities (Task 11) -----------------------------------------------
+// Log's imported-run card and Progress's mileage chart used to read
+// `seed.activities`/`seed.mileage12wk` directly, bypassing Repo entirely
+// (see task-r10-report.md item 8). Now real once Strava/Whoop imports
+// exist, with the same pre-first-import seed fallback as
+// getLatestRecovery/getRecovery7d (markFallback + "zero rows -> seed").
+
+/** Most recent imported activity for Log's AUTO-IMPORTED · STRAVA card. */
+async function getLatestActivity(): Promise<Activity | null> {
+  const { data, error } = await getBrowserClient()
+    .from("activities")
+    .select("*")
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    markFallback("getLatestActivity");
+    return seed.activities.at(-1) ?? null;
+  }
+  return rowToActivity(data);
+}
+
+const METERS_PER_MILE = 1609.344;
+const MILEAGE_WEEKS = 12;
+
+const activityMileageRowSchema = z.object({
+  started_at: z.string(),
+  distance_m: z.number().nullable(),
+  sport: z.string(),
+});
+
+/**
+ * Monday (UTC) of the week containing `date`. Deliberately UTC-based, not
+ * home-timezone-aware like `localDayOf`/matching's day math: this chart is
+ * a "roughly this week" trend line, not a hard day-boundary business rule
+ * (unlike session matching, which must be tz-precise per spec) — using
+ * explicit UTC methods (never a bare `.getDay()`, which reads the *server
+ * machine's* local tz) avoids the "new Date() locale defaults" trap
+ * p2-globals.md warns against without a second profile round trip for a
+ * chart bucket boundary.
+ */
+function mondayUtcOf(date: Date): Date {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const dow = d.getUTCDay(); // 0=Sun..6=Sat
+  const diffToMonday = dow === 0 ? 6 : dow - 1;
+  d.setUTCDate(d.getUTCDate() - diffToMonday);
+  return d;
+}
+
+/** 12 weekly mileage totals (miles, oldest first) for Progress's THIS WEEK · RUN chart. */
+async function getMileage12wk(): Promise<number[]> {
+  const { data, error } = await getBrowserClient()
+    .from("activities")
+    .select("started_at, distance_m, sport")
+    .order("started_at", { ascending: true });
+  if (error) throw error;
+
+  const runRows = z
+    .array(activityMileageRowSchema)
+    .parse(data ?? [])
+    .filter((r) => RUN_EQUIVALENT_SPORTS.has(r.sport));
+
+  if (runRows.length === 0) {
+    markFallback("getMileage12wk");
+    return seed.mileage12wk;
+  }
+
+  const thisMonday = mondayUtcOf(new Date());
+  const bucketKeys: string[] = [];
+  for (let i = MILEAGE_WEEKS - 1; i >= 0; i--) {
+    const d = new Date(thisMonday);
+    d.setUTCDate(d.getUTCDate() - i * 7);
+    bucketKeys.push(d.toISOString().slice(0, 10));
+  }
+
+  const sums = new Map(bucketKeys.map((k) => [k, 0]));
+  for (const row of runRows) {
+    const bucket = mondayUtcOf(new Date(row.started_at)).toISOString().slice(0, 10);
+    if (sums.has(bucket)) {
+      sums.set(bucket, sums.get(bucket)! + (row.distance_m ?? 0) / METERS_PER_MILE);
+    }
+  }
+
+  return bucketKeys.map((k) => Math.round(sums.get(k) ?? 0));
+}
+
 // Predictions have no backing table in the Task-1/Task-3 DDL — the spec
 // marks predicted-time content as still-seeded/derived until Phase 3, so
 // this reads the static seed module directly. seed-derived until Phase 3.
@@ -381,4 +471,6 @@ export const supabaseRepo: Repo = {
   getCoachThread,
   appendChat,
   logRun,
+  getLatestActivity,
+  getMileage12wk,
 };

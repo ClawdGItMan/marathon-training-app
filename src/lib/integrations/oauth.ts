@@ -194,6 +194,30 @@ export async function deleteTokens(userId: string, provider: Provider): Promise<
 }
 
 /**
+ * Resolves a provider's athlete/user identifier (Strava's webhook
+ * `owner_id`, stringified) back to our internal `userId` (Task 11) by
+ * looking up the `integration_tokens` row whose `athlete_ref` matches —
+ * the same column `exchangeStravaCode` populates at connect time. Returns
+ * `null` (not a thrown error) when no connected user matches, since an
+ * unresolvable athlete is an expected, non-exceptional webhook case (e.g. a
+ * stale/foreign subscription), not a failure — the caller (the webhook
+ * route) decides what to do with `null`.
+ */
+export async function findUserByAthleteRef(athleteRef: string, provider: Provider): Promise<string | null> {
+  const parsedProvider = providerSchema.parse(provider);
+
+  const { data, error } = await getAdminClient()
+    .from("integration_tokens")
+    .select("user_id")
+    .eq("provider", parsedProvider)
+    .eq("athlete_ref", athleteRef)
+    .maybeSingle();
+  if (error) throw error;
+
+  return (data as { user_id?: string } | null)?.user_id ?? null;
+}
+
+/**
  * Reads a required env var or throws — used by both providers' client.ts
  * for client id/secret/app-url lookups (misconfiguration should fail loud,
  * not silently build a malformed URL or POST body). Small enough that it

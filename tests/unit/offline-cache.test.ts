@@ -46,6 +46,8 @@ function makeRepo(overrides: Partial<Repo> = {}): Repo {
     getCoachThread: vi.fn(),
     appendChat: vi.fn(async () => undefined),
     logRun: vi.fn(async () => undefined),
+    getLatestActivity: vi.fn(),
+    getMileage12wk: vi.fn(),
     ...overrides,
   } as Repo;
 }

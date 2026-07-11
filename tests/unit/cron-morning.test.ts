@@ -25,20 +25,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * (already covered by whoop-sync.test.ts).
  */
 
-const { getAdminClientMock, getServerClientMock, getBrowserClientMock, syncWhoopMock } = vi.hoisted(() => ({
-  getAdminClientMock: vi.fn(),
-  getServerClientMock: vi.fn(),
-  getBrowserClientMock: vi.fn(),
-  syncWhoopMock: vi.fn(),
-}));
+const { getAdminClientMock, getServerClientMock, getBrowserClientMock, syncWhoopMock, syncStravaMock } = vi.hoisted(
+  () => ({
+    getAdminClientMock: vi.fn(),
+    getServerClientMock: vi.fn(),
+    getBrowserClientMock: vi.fn(),
+    syncWhoopMock: vi.fn(),
+    syncStravaMock: vi.fn(),
+  })
+);
 
 vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: getAdminClientMock }));
 vi.mock("@/lib/supabase/server", () => ({ getServerClient: getServerClientMock }));
 vi.mock("@/lib/supabase/browser", () => ({ getBrowserClient: getBrowserClientMock }));
 vi.mock("@/lib/integrations/whoop/sync", () => ({ syncWhoop: syncWhoopMock }));
+vi.mock("@/lib/integrations/strava/sync", () => ({ syncStrava: syncStravaMock }));
 
 const { localHourOf } = await import("@/lib/sync/timezone");
-const { STALE_RECOVERY_MS } = await import("@/lib/sync/staleness");
+const { STALE_RECOVERY_MS, STALE_ACTIVITIES_MS } = await import("@/lib/sync/staleness");
 const { GET: cronGet } = await import("@/app/api/cron/morning/route");
 const { refreshIfStale } = await import("@/lib/sync/run");
 const { supabaseRepo } = await import("@/lib/data/supabase-repo");
@@ -156,12 +160,14 @@ describe("GET /api/cron/morning", () => {
     expect(response.status).toBe(401);
     expect(getAdminClientMock).not.toHaveBeenCalled();
     expect(syncWhoopMock).not.toHaveBeenCalled();
+    expect(syncStravaMock).not.toHaveBeenCalled();
   });
 
   it("401s with a wrong bearer secret", async () => {
     const response = await cronGet(authedRequest("wrong-secret"));
     expect(response.status).toBe(401);
     expect(syncWhoopMock).not.toHaveBeenCalled();
+    expect(syncStravaMock).not.toHaveBeenCalled();
   });
 
   it("no-ops (does not sync) when the profile's local hour is not 6", async () => {
@@ -174,20 +180,28 @@ describe("GET /api/cron/morning", () => {
 
     expect(response.status).toBe(200);
     expect(syncWhoopMock).not.toHaveBeenCalled();
+    expect(syncStravaMock).not.toHaveBeenCalled();
   });
 
-  it("runs syncWhoop exactly once for a profile whose local hour is exactly 6", async () => {
+  it("runs syncWhoop then syncStrava exactly once for a profile whose local hour is exactly 6", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-10T10:00:00Z")); // 6am ET
     const admin = { from: () => makeQueryBuilder([{ id: "user-1", home_timezone: "America/New_York" }]) };
     getAdminClientMock.mockReturnValue(admin);
     syncWhoopMock.mockResolvedValue({ ok: true, items: 2 });
+    syncStravaMock.mockResolvedValue({ ok: true, items: 1 });
 
     const response = await cronGet(authedRequest());
 
     expect(response.status).toBe(200);
     expect(syncWhoopMock).toHaveBeenCalledTimes(1);
     expect(syncWhoopMock).toHaveBeenCalledWith(admin, "user-1");
+    expect(syncStravaMock).toHaveBeenCalledTimes(1);
+    expect(syncStravaMock).toHaveBeenCalledWith(admin, "user-1");
+    // Whoop before Strava (dedupe ordering — see route.ts's comment).
+    const whoopOrder = syncWhoopMock.mock.invocationCallOrder[0];
+    const stravaOrder = syncStravaMock.mock.invocationCallOrder[0];
+    expect(whoopOrder).toBeLessThan(stravaOrder);
   });
 
   it("iterates every profile, syncing only the ones whose local hour is 6", async () => {
@@ -203,12 +217,15 @@ describe("GET /api/cron/morning", () => {
     };
     getAdminClientMock.mockReturnValue(admin);
     syncWhoopMock.mockResolvedValue({ ok: true, items: 0 });
+    syncStravaMock.mockResolvedValue({ ok: true, items: 0 });
 
     const response = await cronGet(authedRequest());
 
     expect(response.status).toBe(200);
     expect(syncWhoopMock).toHaveBeenCalledTimes(1);
     expect(syncWhoopMock).toHaveBeenCalledWith(admin, "user-et");
+    expect(syncStravaMock).toHaveBeenCalledTimes(1);
+    expect(syncStravaMock).toHaveBeenCalledWith(admin, "user-et");
   });
 });
 
@@ -233,6 +250,7 @@ describe("refreshIfStale", () => {
 
     expect(getAdminClientMock).not.toHaveBeenCalled();
     expect(syncWhoopMock).not.toHaveBeenCalled();
+    expect(syncStravaMock).not.toHaveBeenCalled();
   });
 
   it("triggers a sync when the last ok sync_runs row is older than the recovery staleness threshold", async () => {
@@ -247,6 +265,9 @@ describe("refreshIfStale", () => {
     };
     getAdminClientMock.mockReturnValue(admin);
     syncWhoopMock.mockResolvedValue({ ok: true, items: 1 });
+    // No "strava" row exists in this fixture either -> strava is also
+    // "never synced" -> also triggers, independently of whoop.
+    syncStravaMock.mockResolvedValue({ ok: true, items: 0 });
 
     await refreshIfStale();
 
@@ -262,13 +283,17 @@ describe("refreshIfStale", () => {
     const freshRanAt = new Date(now.getTime() - 60_000).toISOString(); // 1 minute ago
     const admin = {
       from: () =>
-        makeQueryBuilder([{ user_id: "user-1", source: "whoop", ok: true, ran_at: freshRanAt }]),
+        makeQueryBuilder([
+          { user_id: "user-1", source: "whoop", ok: true, ran_at: freshRanAt },
+          { user_id: "user-1", source: "strava", ok: true, ran_at: freshRanAt },
+        ]),
     };
     getAdminClientMock.mockReturnValue(admin);
 
     await refreshIfStale();
 
     expect(syncWhoopMock).not.toHaveBeenCalled();
+    expect(syncStravaMock).not.toHaveBeenCalled();
   });
 
   it("triggers a sync when there is no prior sync_runs row at all (never synced)", async () => {
@@ -276,17 +301,56 @@ describe("refreshIfStale", () => {
     const admin = { from: () => makeQueryBuilder([]) };
     getAdminClientMock.mockReturnValue(admin);
     syncWhoopMock.mockResolvedValue({ ok: true, items: 1 });
+    syncStravaMock.mockResolvedValue({ ok: true, items: 1 });
 
     await refreshIfStale();
 
     expect(syncWhoopMock).toHaveBeenCalledTimes(1);
+    expect(syncStravaMock).toHaveBeenCalledTimes(1);
   });
 
-  it("swallows a sync failure and resolves void rather than throwing", async () => {
+  it("triggers syncStrava independently (STALE_ACTIVITIES_MS, 1h) when whoop is still fresh", async () => {
+    mockUser({ id: "user-1" });
+    vi.useFakeTimers();
+    const now = new Date("2026-07-10T12:00:00Z");
+    vi.setSystemTime(now);
+    const freshWhoop = new Date(now.getTime() - 60_000).toISOString();
+    const staleStrava = new Date(now.getTime() - STALE_ACTIVITIES_MS - 60_000).toISOString();
+    const admin = {
+      from: () =>
+        makeQueryBuilder([
+          { user_id: "user-1", source: "whoop", ok: true, ran_at: freshWhoop },
+          { user_id: "user-1", source: "strava", ok: true, ran_at: staleStrava },
+        ]),
+    };
+    getAdminClientMock.mockReturnValue(admin);
+    syncStravaMock.mockResolvedValue({ ok: true, items: 1 });
+
+    await refreshIfStale();
+
+    expect(syncWhoopMock).not.toHaveBeenCalled();
+    expect(syncStravaMock).toHaveBeenCalledTimes(1);
+    expect(syncStravaMock).toHaveBeenCalledWith(admin, "user-1");
+  });
+
+  it("swallows a whoop sync failure, resolves void, and still attempts strava independently", async () => {
     mockUser({ id: "user-1" });
     const admin = { from: () => makeQueryBuilder([]) };
     getAdminClientMock.mockReturnValue(admin);
     syncWhoopMock.mockRejectedValue(new Error("whoop is down"));
+    syncStravaMock.mockResolvedValue({ ok: true, items: 0 });
+
+    await expect(refreshIfStale()).resolves.toBeUndefined();
+
+    expect(syncStravaMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("swallows a strava sync failure and resolves void rather than throwing", async () => {
+    mockUser({ id: "user-1" });
+    const admin = { from: () => makeQueryBuilder([]) };
+    getAdminClientMock.mockReturnValue(admin);
+    syncWhoopMock.mockResolvedValue({ ok: true, items: 0 });
+    syncStravaMock.mockRejectedValue(new Error("strava is down"));
 
     await expect(refreshIfStale()).resolves.toBeUndefined();
   });
@@ -365,5 +429,103 @@ describe("supabaseRepo recovery fallback (pre-first-sync)", () => {
 
     expect(result.date).toBe("2026-07-09");
     expect(getStaleInfo().getLatestRecovery).toEqual({ servedFromCache: false, cachedAt: expect.any(String) });
+  });
+});
+
+// ---- supabaseRepo activity/mileage fallback (Task 11) -----------------------
+
+describe("supabaseRepo activity/mileage fallback (pre-first-import, Task 11)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("localStorage", makeFakeLocalStorage());
+    __resetStaleInfoForTests();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it("getLatestActivity falls back to the seed's latest activity when activities has no rows", async () => {
+    getBrowserClientMock.mockReturnValue({ from: () => makeQueryBuilder([]) });
+
+    const result = await supabaseRepo.getLatestActivity();
+
+    expect(result).toEqual(seed.activities.at(-1));
+  });
+
+  it("getLatestActivity returns the real row (mapped via rowToActivity) when one exists", async () => {
+    const row = {
+      id: "activity-1",
+      started_at: "2026-07-09T13:02:00.000Z",
+      distance_m: 8046.72, // 5.0mi
+      moving_sec: 1800,
+      avg_pace_sec_per_mi: 360,
+      payload: { title: "Evening Shakeout" },
+    };
+    getBrowserClientMock.mockReturnValue({ from: () => makeQueryBuilder([row]) });
+
+    const result = await supabaseRepo.getLatestActivity();
+
+    expect(result).toEqual({
+      id: "activity-1",
+      date: "2026-07-09",
+      title: "Evening Shakeout",
+      distanceMi: 5,
+      timeSec: 1800,
+      paceSecPerMi: 360,
+      synced: true,
+    });
+  });
+
+  it("marks the fallback flag in staleInfo when getLatestActivity falls back to seed data", async () => {
+    getBrowserClientMock.mockReturnValue({ from: () => makeQueryBuilder([]) });
+    const cached = withOfflineCache(supabaseRepo);
+
+    await cached.getLatestActivity();
+
+    expect(getStaleInfo().getLatestActivity).toMatchObject({ fallback: true });
+  });
+
+  it("getMileage12wk falls back to the seed's mileage array when no activities exist", async () => {
+    getBrowserClientMock.mockReturnValue({ from: () => makeQueryBuilder([]) });
+
+    const result = await supabaseRepo.getMileage12wk();
+
+    expect(result).toEqual(seed.mileage12wk);
+  });
+
+  it("getMileage12wk falls back when the only rows present are non-run-equivalent sports", async () => {
+    const rows = [{ started_at: "2026-07-09T13:00:00.000Z", distance_m: 20000, sport: "Ride" }];
+    getBrowserClientMock.mockReturnValue({ from: () => makeQueryBuilder(rows) });
+
+    const result = await supabaseRepo.getMileage12wk();
+
+    expect(result).toEqual(seed.mileage12wk);
+  });
+
+  it("getMileage12wk computes real weekly sums (miles, oldest-first, length 12) once run activities exist", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-10T12:00:00Z")); // Friday; this week's Monday is 2026-07-06
+    const rows = [
+      { started_at: "2026-07-09T13:00:00.000Z", distance_m: 8046.72, sport: "Run" }, // 5.0mi, Thu
+      { started_at: "2026-07-08T13:00:00.000Z", distance_m: 1609.344, sport: "Run" }, // 1.0mi, Wed
+    ];
+    getBrowserClientMock.mockReturnValue({ from: () => makeQueryBuilder(rows) });
+
+    const result = await supabaseRepo.getMileage12wk();
+
+    expect(result).toHaveLength(12);
+    expect(result.at(-1)).toBe(6); // this week's bucket: 5.0 + 1.0, rounded
+    expect(result.slice(0, 11).every((n) => n === 0)).toBe(true);
+  });
+
+  it("marks the fallback flag in staleInfo when getMileage12wk falls back to seed data", async () => {
+    getBrowserClientMock.mockReturnValue({ from: () => makeQueryBuilder([]) });
+    const cached = withOfflineCache(supabaseRepo);
+
+    await cached.getMileage12wk();
+
+    expect(getStaleInfo().getMileage12wk).toMatchObject({ fallback: true });
   });
 });
