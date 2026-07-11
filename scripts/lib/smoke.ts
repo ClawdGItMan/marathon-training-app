@@ -17,10 +17,18 @@ const profileRowSchema = z.object({ id: z.string() });
  * Resolves the sole `profiles` row's id. This app is single-tenant — gated
  * to exactly one account by `ALLOWED_EMAIL` (src/lib/auth/allowlist.ts) —
  * so there is never a "which user" argument to a smoke script; there is
- * exactly one profile once someone has signed in at least once. Throws an
- * actionable error (rather than returning null) when no profile exists yet,
- * since every caller's next step needs a userId to proceed and "nobody has
- * signed in" has one unambiguous fix.
+ * exactly one profile once the bootstrap has been run. Throws an actionable
+ * error (rather than returning null) when no profile exists yet, since
+ * every caller's next step needs a userId to proceed and "not bootstrapped
+ * yet" has one unambiguous fix.
+ *
+ * NOTE (C1): signing in does NOT create a profiles row — an OTP sign-in
+ * creates only the auth.users row, and profiles INSERT is service-role-only
+ * (migration 0004). The bootstrap order is: (a) deploy, (b) owner signs in
+ * once via OTP, (c) capture the auth uuid (Supabase dashboard →
+ * Authentication), (d) `SEED_USER_ID=<uuid> SEED_USER_EMAIL=<email> npm run
+ * db:seed:gen` and run the emitted supabase/seed.cloud.sql against the
+ * cloud DB. See README's "Phase 2" → "Cloud bootstrap" steps.
  */
 export async function requireSoleProfileId(admin: SupabaseClient): Promise<string> {
   const { data, error } = await admin
@@ -34,8 +42,10 @@ export async function requireSoleProfileId(admin: SupabaseClient): Promise<strin
   const profile = rows[0];
   if (!profile) {
     throw new Error(
-      "No profile found in the database. Sign in once via the deployed app " +
-        "(creates the profiles row) before running this smoke check."
+      "No profile found in the database. Run the cloud bootstrap first " +
+        "(sign in once via the deployed app, then seed the profile: " +
+        "SEED_USER_ID=<auth uuid> SEED_USER_EMAIL=<email> npm run db:seed:gen " +
+        "and apply supabase/seed.cloud.sql — see README's Phase 2 section)."
     );
   }
 

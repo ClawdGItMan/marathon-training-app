@@ -44,6 +44,7 @@
  * helpers are imported elsewhere) performs the actual file write.
  */
 
+import { z } from "zod";
 import type { Seed } from "../src/lib/domain/schemas";
 import { seed } from "../src/lib/data/seed";
 import { TEST_USER_ID, TEST_USER_EMAIL, TEST_USER_PASSWORD } from "../tests/parity/constants";
@@ -51,6 +52,54 @@ import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { toChatMessageRow, toPainAreaRow, toPlannedSessionRow, toProposalRow } from "./lib/seed-rows";
+
+// ---- seed user resolution (C1: real-user bootstrap) -------------------------
+// The deployed app's bootstrap problem: a first OTP sign-in creates ONLY an
+// auth.users row — nothing creates a profiles row (profiles INSERT is
+// service-role-only as of migration 0004), so a real user would otherwise
+// see a blank app and a 502'ing OAuth callback (integration_tokens FK ->
+// profiles). The fix is to run THIS generator against the cloud DB with the
+// real user's auth uuid: SEED_USER_ID + SEED_USER_EMAIL env overrides seed
+// `profiles` + every data row against that uuid and SKIP the auth.users
+// insert (the real auth user already exists — created by their first OTP
+// sign-in). Env unset (local stack, every test) keeps the existing TEST
+// constants and stays byte-identical to the pre-parameterization output.
+
+export type SeedUser = {
+  userId: string;
+  userEmail: string;
+  /** true = local test stack: also insert the password-auth auth.users/auth.identities rows. */
+  createAuthUser: boolean;
+};
+
+export const DEFAULT_SEED_USER: SeedUser = {
+  userId: TEST_USER_ID,
+  userEmail: TEST_USER_EMAIL,
+  createAuthUser: true,
+};
+
+const cloudSeedEnvSchema = z.object({
+  SEED_USER_ID: z.string().uuid("SEED_USER_ID must be the auth user's uuid"),
+  SEED_USER_EMAIL: z
+    .string({
+      error:
+        "SEED_USER_EMAIL is required whenever SEED_USER_ID is set — never silently seed the local test email into a cloud profile.",
+    })
+    .email(),
+});
+
+/**
+ * Resolves which user the seed targets from env (Zod-validated at the
+ * boundary). `SEED_USER_ID` unset -> the local test-stack default.
+ */
+export function resolveSeedUser(env: Record<string, string | undefined> = process.env): SeedUser {
+  if (!env.SEED_USER_ID) return DEFAULT_SEED_USER;
+  const parsed = cloudSeedEnvSchema.parse({
+    SEED_USER_ID: env.SEED_USER_ID,
+    SEED_USER_EMAIL: env.SEED_USER_EMAIL,
+  });
+  return { userId: parsed.SEED_USER_ID, userEmail: parsed.SEED_USER_EMAIL, createAuthUser: false };
+}
 
 // ---- SQL literal helpers --------------------------------------------------
 // Exported so scripts/reanchor-plan.ts (Task 13) can build its cloud-DB
@@ -87,8 +136,15 @@ function insert(table: string, columns: string[], rows: string[][]): string {
  * Builds the full seed.sql text for a given Seed object. Pure — no I/O —
  * so it can be called with either the canonical demo `seed` (this file's
  * own CLI entry point below) or a re-anchored Seed (scripts/reanchor-plan.ts).
+ *
+ * `user` defaults to the local test-stack account; pass `resolveSeedUser()`'s
+ * cloud override to seed a real user's profile + data instead (in which case
+ * the auth.users/auth.identities inserts are skipped entirely — see the
+ * "seed user resolution" comment above).
  */
-export function generateSeedSql(seed: Seed): string {
+export function generateSeedSql(seed: Seed, user: SeedUser = DEFAULT_SEED_USER): string {
+  const userId = user.userId;
+
   // ---- Auth user + profile ---------------------------------------------------
 
   const authUserSql = `
@@ -99,10 +155,10 @@ insert into auth.users (
   confirmation_token, email_change, email_change_token_new, recovery_token
 ) values (
   '00000000-0000-0000-0000-000000000000',
-  ${sqlStr(TEST_USER_ID)},
+  ${sqlStr(userId)},
   'authenticated',
   'authenticated',
-  ${sqlStr(TEST_USER_EMAIL)},
+  ${sqlStr(user.userEmail)},
   crypt(${sqlStr(TEST_USER_PASSWORD)}, gen_salt('bf')),
   now(),
   '{"provider":"email","providers":["email"]}'::jsonb,
@@ -119,9 +175,9 @@ insert into auth.identities (
   id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
 ) values (
   gen_random_uuid(),
-  ${sqlStr(TEST_USER_ID)},
-  ${sqlStr(TEST_USER_ID)},
-  ${sqlJson({ sub: TEST_USER_ID, email: TEST_USER_EMAIL })},
+  ${sqlStr(userId)},
+  ${sqlStr(userId)},
+  ${sqlJson({ sub: userId, email: user.userEmail })},
   'email',
   now(),
   now(),
@@ -132,7 +188,7 @@ insert into auth.identities (
   const profileSql = insert(
     "public.profiles",
     ["id", "email", "home_timezone"],
-    [[sqlStr(TEST_USER_ID), sqlStr(TEST_USER_EMAIL), sqlStr("America/New_York")]]
+    [[sqlStr(userId), sqlStr(user.userEmail), sqlStr("America/New_York")]]
   );
 
   // ---- goals ------------------------------------------------------------------
@@ -144,7 +200,7 @@ insert into auth.identities (
     [
       [
         sqlStr("goal-1"),
-        sqlStr(TEST_USER_ID),
+        sqlStr(userId),
         sqlStr(seed.goal.name),
         sqlStr(seed.goal.date),
         sqlNum(seed.goal.goalSec),
@@ -169,7 +225,7 @@ insert into auth.identities (
     [
       [
         sqlStr("block-1"),
-        sqlStr(TEST_USER_ID),
+        sqlStr(userId),
         sqlStr(seed.block.longRunLabel),
         sqlStr(seed.block.phase),
         sqlNum(seed.block.week),
@@ -191,7 +247,7 @@ insert into auth.identities (
     "public.planned_sessions",
     ["id", "user_id", "date", "title", "type", "detail", "structure", "status", "provenance", "payload"],
     seed.week.map((session) => {
-      const row = toPlannedSessionRow(session, TEST_USER_ID);
+      const row = toPlannedSessionRow(session, userId);
       return [
         sqlStr(row.id),
         sqlStr(row.user_id),
@@ -218,7 +274,7 @@ insert into auth.identities (
     "public.proposals",
     ["id", "user_id", "scope", "session_id", "status", "payload"],
     seed.proposals.map((proposal) => {
-      const row = toProposalRow(proposal, TEST_USER_ID);
+      const row = toProposalRow(proposal, userId);
       return [
         sqlStr(row.id),
         sqlStr(row.user_id),
@@ -236,7 +292,7 @@ insert into auth.identities (
     "public.pain_areas",
     ["id", "user_id", "name", "severity", "trend", "payload"],
     seed.pains.map((pain) => {
-      const row = toPainAreaRow(pain, TEST_USER_ID);
+      const row = toPainAreaRow(pain, userId);
       return [
         sqlStr(row.id),
         sqlStr(row.user_id),
@@ -258,7 +314,7 @@ insert into auth.identities (
     "public.recovery_snapshots",
     ["user_id", "day", "recovery_pct", "hrv_ms", "rhr", "day_strain", "sleep", "source", "payload"],
     seed.recovery.map((snapshot) => [
-      sqlStr(TEST_USER_ID),
+      sqlStr(userId),
       sqlStr(snapshot.date),
       sqlNum(snapshot.recoveryPct),
       sqlNum(snapshot.hrv),
@@ -294,7 +350,7 @@ insert into auth.identities (
     seed.activities.map((activity) => {
       const startedAt = `${activity.date}T00:00:00Z`;
       return [
-        sqlStr(TEST_USER_ID),
+        sqlStr(userId),
         sqlStr("run"),
         sqlStr(startedAt),
         `(${sqlStr(startedAt)}::timestamptz + make_interval(secs => ${sqlNum(activity.timeSec)}))`,
@@ -312,7 +368,7 @@ insert into auth.identities (
     "public.chat_messages",
     ["id", "user_id", "role", "body", "time_label", "proposal_refs", "seq", "payload"],
     seed.coachThread.map((message, index) => {
-      const row = toChatMessageRow(message, index, TEST_USER_ID);
+      const row = toChatMessageRow(message, index, userId);
       return [
         sqlStr(row.id),
         sqlStr(row.user_id),
@@ -331,7 +387,9 @@ insert into auth.identities (
   const sections = [
     "-- Generated by scripts/generate-supabase-seed.ts from src/lib/data/seed.ts.",
     "-- Do not hand-edit — re-run `npm run db:seed:gen` instead.",
-    authUserSql,
+    // Cloud mode (SEED_USER_ID set): the real auth.users row already exists
+    // (created by the owner's first OTP sign-in) — only data rows are seeded.
+    user.createAuthUser ? authUserSql : "",
     profileSql,
     goalsSql,
     blocksSql,
@@ -364,9 +422,23 @@ function isMainModule(): boolean {
 }
 
 if (isMainModule()) {
-  const output = generateSeedSql(seed);
-  const outPath = resolve(__dirname, "../supabase/seed.sql");
+  const user = resolveSeedUser();
+  const output = generateSeedSql(seed, user);
+  // Cloud mode writes to a SEPARATE file: overwriting supabase/seed.sql with
+  // a real user's uuid/email would break the local stack (its auth user is
+  // the TEST account) and every stack-backed test on the next `db reset`.
+  const outPath = user.createAuthUser
+    ? resolve(__dirname, "../supabase/seed.sql")
+    : resolve(__dirname, "../supabase/seed.cloud.sql");
   writeFileSync(outPath, output, "utf8");
   // eslint-disable-next-line no-console
   console.log(`Wrote ${outPath}`);
+  if (!user.createAuthUser) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `Cloud seed for ${user.userEmail} (${user.userId}) — run it against the deployed DB:\n` +
+        `  psql "$SUPABASE_DB_URL" -f supabase/seed.cloud.sql\n` +
+        "(or paste into the Supabase SQL editor). Not for the local stack; not committed."
+    );
+  }
 }
