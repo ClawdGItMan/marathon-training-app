@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { saveTokens } from "@/lib/integrations/oauth";
+import { fetchWithAutoRefresh, requireEnv, type RefreshableAuthContext } from "@/lib/integrations/oauth";
 import {
   whoopCycleCollectionSchema,
   whoopRecoveryCollectionSchema,
@@ -53,12 +53,6 @@ const whoopTokenResponseSchema = z.object({
   scope: z.string().optional(),
   token_type: z.string().optional(),
 });
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is not set (misconfiguration).`);
-  return value;
-}
 
 /** `${NEXT_PUBLIC_APP_URL}/api/integrations/whoop/callback` — must match the redirect URL registered with Whoop. */
 export function whoopRedirectUri(): string {
@@ -140,41 +134,21 @@ const MAX_COLLECTION_PAGES = 50;
  * than each fetcher resolving tokens itself: `tokens` is mutated in place
  * when a 401 triggers a refresh, so every subsequent fetcher call in the
  * same sync run (sync.ts calls these sequentially, never concurrently, for
- * exactly this reason) picks up the rotated access token automatically —
- * and `userId` is here so the refreshed pair can be persisted via
- * `saveTokens` at the moment it's minted, not passed back up and persisted
- * later (see the persistence call in `whoopFetch` below).
+ * exactly this reason) picks up the rotated access token automatically.
+ * Whoop has no athleteRef concept, so this is just oauth.ts's
+ * RefreshableAuthContext without that (optional) field.
  */
-export type WhoopAuthContext = {
-  userId: string;
-  tokens: { access: string; refresh: string };
-};
+export type WhoopAuthContext = RefreshableAuthContext;
 
 /**
- * GETs `url` with the context's current access token. On a 401, refreshes
- * the token pair (Whoop rotates the refresh token on every use), persists
- * the rotated pair via `saveTokens` — BEFORE the retry, so a crash between
- * refresh and retry still leaves a live refresh token stored — updates
- * `ctx.tokens` in place, then retries exactly once. A second 401 (or any
- * other non-ok status) is a hard failure.
+ * GETs `url` with the context's current access token, auto-refreshing once
+ * on a 401 via oauth.ts's shared `fetchWithAutoRefresh` (Task 10
+ * extraction — this used to inline the refresh-retry loop directly; see
+ * that function for the persist-before-retry crash-safety details). A
+ * second 401 (or any other non-ok status) is a hard failure.
  */
 async function whoopFetch(ctx: WhoopAuthContext, url: URL): Promise<unknown> {
-  const attempt = () =>
-    fetch(url.toString(), { headers: { Authorization: `Bearer ${ctx.tokens.access}` } });
-
-  let res = await attempt();
-
-  if (res.status === 401) {
-    const rotated = await refreshWhoopTokens(ctx.tokens.refresh);
-    ctx.tokens = { access: rotated.access, refresh: rotated.refresh };
-    await saveTokens(ctx.userId, "whoop", {
-      access: rotated.access,
-      refresh: rotated.refresh,
-      expiresAt: rotated.expiresAt,
-      athleteRef: rotated.athleteRef,
-    });
-    res = await attempt();
-  }
+  const res = await fetchWithAutoRefresh(url, "whoop", ctx, refreshWhoopTokens);
 
   if (!res.ok) {
     throw new Error(`Whoop API request failed: ${res.status} ${res.statusText} (${url.pathname})`);

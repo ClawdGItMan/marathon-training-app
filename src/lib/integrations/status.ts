@@ -7,7 +7,7 @@ import { getServerClient } from "@/lib/supabase/server";
 /**
  * Presence-only integration status for the Settings CONNECTIONS row
  * (supabase mode) — a Server Action so client components (ConnectionsSection
- * / WhoopConnectionRow) can call it directly without a dedicated API route,
+ * / ConnectionRow) can call it directly without a dedicated API route,
  * per CLAUDE.md's "Server Actions over API routes when possible".
  *
  * Deliberately queries only the `provider` column (never

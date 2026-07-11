@@ -1,36 +1,40 @@
-import { WhoopConnectionRow } from "@/components/settings/WhoopConnectionRow";
+import { ConnectionRow } from "@/components/settings/ConnectionRow";
 
-const PROVIDERS = ["Whoop", "Strava"] as const;
+const PROVIDERS = [
+  { key: "whoop", label: "Whoop" },
+  { key: "strava", label: "Strava" },
+] as const;
 
 /**
  * CONNECTIONS rows (Settings, R12 — no v2 mock). Local mode (default/unset
  * NEXT_PUBLIC_REPO_MODE) always renders the Phase-1 static row for both
  * providers, unchanged — the 42-test e2e suite runs in local mode and
- * asserts this exact markup (tests/e2e/settings.spec.ts). In supabase mode,
- * Whoop's row goes live (WhoopConnectionRow — real CONNECTED/NOT CONNECTED
- * + CONNECT/DISCONNECT, see that component). Strava has no connect route
- * yet (Task 10), so it keeps the static "PHASE 2" placeholder in both
- * modes — disabled/ghost tier per design-v2 README's grey scale
- * (`#3f444b`), no lime (lime is reserved for "now/act").
+ * asserts this exact markup (tests/e2e/settings.spec.ts). In supabase
+ * mode, both rows go live via the shared ConnectionRow component (real
+ * CONNECTED/NOT CONNECTED + CONNECT/DISCONNECT, backed by each provider's
+ * `/api/integrations/{provider}/connect` route — Whoop from Task 7, Strava
+ * from Task 10). Providers are treated uniformly (no per-provider branch)
+ * specifically so a reviewer can see neither provider's row is a
+ * copy-paste fork of the other.
  */
 export function ConnectionsSection() {
   const isSupabaseMode = process.env.NEXT_PUBLIC_REPO_MODE === "supabase";
 
   return (
     <div>
-      {PROVIDERS.map((provider, i) => (
+      {PROVIDERS.map(({ key, label }, i) => (
         <div
-          key={provider}
+          key={key}
           className={`flex items-center justify-between py-[13px] ${
             i === 0 ? "" : "border-t border-white/[.09]"
           }`}
         >
-          {provider === "Whoop" && isSupabaseMode ? (
-            <WhoopConnectionRow />
+          {isSupabaseMode ? (
+            <ConnectionRow provider={key} label={label} />
           ) : (
             <>
               <div>
-                <div className="font-display text-[13.5px] text-white">{provider}</div>
+                <div className="font-display text-[13.5px] text-white">{label}</div>
                 <div className="mt-[3px] font-mono text-[9px] tracking-[.14em] text-[#5c6168]">
                   NOT CONNECTED
                 </div>
@@ -42,7 +46,7 @@ export function ConnectionsSection() {
                 <button
                   type="button"
                   disabled
-                  aria-label={`Connect ${provider} — available in Phase 2`}
+                  aria-label={`Connect ${label} — available in Phase 2`}
                   className="cursor-not-allowed whitespace-nowrap rounded-[2px] border border-[var(--hair)] px-[13px] py-[7px] font-mono text-[9px] tracking-[.1em] text-[#3f444b]"
                 >
                   CONNECT

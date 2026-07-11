@@ -18,17 +18,26 @@ import { encryptToken } from "@/lib/crypto/token-cipher";
  * not just that the right functions were called.
  */
 
-const { cookiesMock, getAdminClientMock } = vi.hoisted(() => ({
+const { cookiesMock, getAdminClientMock, getServerClientMock } = vi.hoisted(() => ({
   cookiesMock: vi.fn(),
   getAdminClientMock: vi.fn(),
+  getServerClientMock: vi.fn(),
 }));
 
 vi.mock("next/headers", () => ({ cookies: cookiesMock }));
 vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: getAdminClientMock }));
+vi.mock("@/lib/supabase/server", () => ({ getServerClient: getServerClientMock }));
 
-const { assertState, deleteTokens, loadTokens, makeState, OAUTH_STATE_COOKIE, saveTokens } = await import(
-  "@/lib/integrations/oauth"
-);
+const {
+  assertState,
+  deleteTokens,
+  fetchWithAutoRefresh,
+  getSessionUser,
+  loadTokens,
+  makeState,
+  OAUTH_STATE_COOKIE,
+  saveTokens,
+} = await import("@/lib/integrations/oauth");
 
 function testKey(): string {
   return randomBytes(32).toString("base64");
@@ -242,5 +251,146 @@ describe("deleteTokens", () => {
     getAdminClientMock.mockReturnValue(admin);
 
     await expect(deleteTokens("user-123", "strava")).rejects.toBeTruthy();
+  });
+});
+
+describe("getSessionUser", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns null when there is no session", async () => {
+    getServerClientMock.mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+    });
+
+    expect(await getSessionUser()).toBeNull();
+  });
+
+  it("returns the session user's id when there is a session", async () => {
+    getServerClientMock.mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-77" } } }) },
+    });
+
+    expect(await getSessionUser()).toEqual({ id: "user-77" });
+  });
+});
+
+describe("fetchWithAutoRefresh", () => {
+  /** Fluent admin-client fake backing saveTokens/loadTokens for these tests. */
+  function makeFakeAdmin() {
+    const rows = new Map<string, Record<string, unknown>>();
+    const client = {
+      from: () => ({
+        upsert: async (row: Record<string, unknown>) => {
+          rows.set(`${row.user_id}:${row.provider}`, row);
+          return { error: null };
+        },
+      }),
+    };
+    return { client, rows };
+  }
+
+  beforeEach(() => {
+    vi.stubEnv("TOKEN_ENCRYPTION_KEY", testKey());
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("returns the first response as-is and never calls refresh when it isn't a 401", async () => {
+    getAdminClientMock.mockReturnValue(makeFakeAdmin().client);
+    const okResponse = { ok: true, status: 200, statusText: "OK", json: async () => ({ hello: "world" }) };
+    const fetchMock = vi.fn().mockResolvedValue(okResponse);
+    vi.stubGlobal("fetch", fetchMock);
+    const refreshFn = vi.fn();
+
+    const ctx = { userId: "user-1", tokens: { access: "access-1", refresh: "refresh-1" } };
+    const res = await fetchWithAutoRefresh(new URL("https://example.com/x"), "whoop", ctx, refreshFn);
+
+    expect(res).toBe(okResponse);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(refreshFn).not.toHaveBeenCalled();
+    expect(ctx.tokens).toEqual({ access: "access-1", refresh: "refresh-1" });
+  });
+
+  it("on a 401, refreshes, persists the rotated pair with athleteRef defaulted to null when ctx has none, mutates ctx.tokens, and retries once", async () => {
+    const { client: admin, rows } = makeFakeAdmin();
+    getAdminClientMock.mockReturnValue(admin);
+    let calls = 0;
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) return { ok: false, status: 401, statusText: "Unauthorized", json: async () => ({}) };
+      return { ok: true, status: 200, statusText: "OK", json: async () => ({}) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const refreshFn = vi.fn().mockResolvedValue({
+      access: "rotated-access",
+      refresh: "rotated-refresh",
+      expiresAt: "2026-09-01T00:00:00.000Z",
+    });
+
+    const ctx = { userId: "user-1", tokens: { access: "access-old", refresh: "refresh-old" } };
+    const res = await fetchWithAutoRefresh(new URL("https://example.com/x"), "whoop", ctx, refreshFn);
+
+    expect(res.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(refreshFn).toHaveBeenCalledTimes(1);
+    expect(refreshFn).toHaveBeenCalledWith("refresh-old");
+    expect(ctx.tokens).toEqual({ access: "rotated-access", refresh: "rotated-refresh" });
+
+    const persisted = rows.get("user-1:whoop");
+    expect(persisted).toMatchObject({ expires_at: "2026-09-01T00:00:00.000Z", athlete_ref: null });
+  });
+
+  it("on a 401, preserves ctx.athleteRef in the persisted row instead of nulling it out", async () => {
+    const { client: admin, rows } = makeFakeAdmin();
+    getAdminClientMock.mockReturnValue(admin);
+    let calls = 0;
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) return { ok: false, status: 401, statusText: "Unauthorized", json: async () => ({}) };
+      return { ok: true, status: 200, statusText: "OK", json: async () => ({}) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const refreshFn = vi.fn().mockResolvedValue({
+      access: "rotated-access",
+      refresh: "rotated-refresh",
+      expiresAt: "2026-09-01T00:00:00.000Z",
+    });
+
+    const ctx = {
+      userId: "user-1",
+      tokens: { access: "access-old", refresh: "refresh-old" },
+      athleteRef: "athlete-55",
+    };
+    await fetchWithAutoRefresh(new URL("https://example.com/x"), "strava", ctx, refreshFn);
+
+    const persisted = rows.get("user-1:strava");
+    expect(persisted).toMatchObject({ athlete_ref: "athlete-55" });
+  });
+
+  it("a second 401 after the retry is returned as-is (not-ok), not thrown — callers decide how to fail", async () => {
+    const { client: admin } = makeFakeAdmin();
+    getAdminClientMock.mockReturnValue(admin);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: false, status: 401, statusText: "Unauthorized", json: async () => ({}) });
+    vi.stubGlobal("fetch", fetchMock);
+    const refreshFn = vi.fn().mockResolvedValue({
+      access: "rotated-access",
+      refresh: "rotated-refresh",
+      expiresAt: "2026-09-01T00:00:00.000Z",
+    });
+
+    const ctx = { userId: "user-1", tokens: { access: "access-old", refresh: "refresh-old" } };
+    const res = await fetchWithAutoRefresh(new URL("https://example.com/x"), "whoop", ctx, refreshFn);
+
+    expect(res.ok).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(refreshFn).toHaveBeenCalledTimes(1);
   });
 });

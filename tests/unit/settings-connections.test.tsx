@@ -3,13 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectionsSection } from "@/components/settings/ConnectionsSection";
 
 /**
- * Behavioral tests for the Settings CONNECTIONS row (Task 7): local mode
- * must render byte-identical to the Phase-1 static row (the 42-test e2e
- * suite runs in local mode and asserts this exact markup — see
- * tests/e2e/settings.spec.ts), while supabase mode wires Whoop's row to
- * real status via the getIntegrationStatus server action (mocked here) and
- * a live CONNECT link / DISCONNECT button. Strava has no Task 7 route yet,
- * so its row stays the static Phase-1 placeholder in both modes.
+ * Behavioral tests for the Settings CONNECTIONS row (Tasks 7/10): local
+ * mode must render byte-identical to the Phase-1 static row (the 42-test
+ * e2e suite runs in local mode and asserts this exact markup — see
+ * tests/e2e/settings.spec.ts), while supabase mode wires BOTH Whoop's and
+ * Strava's rows to real status via the getIntegrationStatus server action
+ * (mocked here) and a live CONNECT link / DISCONNECT button — both
+ * providers share the same ConnectionRow component (parameterized by
+ * provider), so these tests exercise each provider independently to prove
+ * the parameterization actually threads the right provider through, not
+ * just Whoop's hardcoded path.
  */
 
 const { getIntegrationStatusMock } = vi.hoisted(() => ({
@@ -55,22 +58,23 @@ describe("ConnectionsSection (supabase mode)", () => {
     vi.stubEnv("NEXT_PUBLIC_REPO_MODE", "supabase");
   });
 
-  it("shows a live CONNECT link for Whoop when not connected, and keeps Strava's static placeholder", async () => {
+  it("shows a live CONNECT link for both providers when neither is connected", async () => {
     getIntegrationStatusMock.mockResolvedValue({ whoop: false, strava: false });
 
     render(<ConnectionsSection />);
 
-    const connectLink = await screen.findByRole("link", { name: "CONNECT" });
-    expect(connectLink).toHaveAttribute("href", "/api/integrations/whoop/connect");
-    expect(screen.getAllByText("NOT CONNECTED")).toHaveLength(2); // Whoop (live) + Strava (static)
-
-    // Strava keeps the Phase-1 disabled placeholder — Task 7 only wires Whoop.
-    expect(
-      screen.getByRole("button", { name: "Connect Strava — available in Phase 2" })
-    ).toBeDisabled();
+    const connectLinks = await screen.findAllByRole("link", { name: "CONNECT" });
+    expect(connectLinks).toHaveLength(2);
+    expect(connectLinks.map((link) => link.getAttribute("href")).sort()).toEqual([
+      "/api/integrations/strava/connect",
+      "/api/integrations/whoop/connect",
+    ]);
+    expect(screen.getAllByText("NOT CONNECTED")).toHaveLength(2);
+    // Neither provider keeps the disabled Phase-1 placeholder anymore.
+    expect(screen.queryByText("PHASE 2")).not.toBeInTheDocument();
   });
 
-  it("shows CONNECTED + a DISCONNECT action for Whoop when a token exists, and disconnecting flips it back", async () => {
+  it("shows CONNECTED + a DISCONNECT action for Whoop only when just Whoop has a token", async () => {
     getIntegrationStatusMock.mockResolvedValue({ whoop: true, strava: false });
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
@@ -79,6 +83,11 @@ describe("ConnectionsSection (supabase mode)", () => {
 
     const disconnectButton = await screen.findByRole("button", { name: "DISCONNECT" });
     expect(screen.getByText("CONNECTED")).toBeInTheDocument();
+    // Strava is still live but unconnected — exactly one CONNECT link left.
+    expect(screen.getByRole("link", { name: "CONNECT" })).toHaveAttribute(
+      "href",
+      "/api/integrations/strava/connect"
+    );
 
     fireEvent.click(disconnectButton);
 
@@ -86,12 +95,41 @@ describe("ConnectionsSection (supabase mode)", () => {
       method: "DELETE",
     });
 
-    await waitFor(() =>
-      expect(screen.getByRole("link", { name: "CONNECT" })).toHaveAttribute(
-        "href",
-        "/api/integrations/whoop/connect"
-      )
-    );
+    await waitFor(() => expect(screen.getAllByRole("link", { name: "CONNECT" })).toHaveLength(2));
     expect(screen.queryByText("CONNECTED")).not.toBeInTheDocument();
+  });
+
+  it("shows CONNECTED + a DISCONNECT action for Strava only when just Strava has a token", async () => {
+    getIntegrationStatusMock.mockResolvedValue({ whoop: false, strava: true });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ConnectionsSection />);
+
+    const disconnectButton = await screen.findByRole("button", { name: "DISCONNECT" });
+    expect(screen.getByText("CONNECTED")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "CONNECT" })).toHaveAttribute(
+      "href",
+      "/api/integrations/whoop/connect"
+    );
+
+    fireEvent.click(disconnectButton);
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/integrations/strava/connect", {
+      method: "DELETE",
+    });
+
+    await waitFor(() => expect(screen.getAllByRole("link", { name: "CONNECT" })).toHaveLength(2));
+    expect(screen.queryByText("CONNECTED")).not.toBeInTheDocument();
+  });
+
+  it("labels each row with its own provider name", async () => {
+    getIntegrationStatusMock.mockResolvedValue({ whoop: true, strava: true });
+
+    render(<ConnectionsSection />);
+
+    await waitFor(() => expect(screen.getAllByText("CONNECTED")).toHaveLength(2));
+    expect(screen.getByText("Whoop")).toBeInTheDocument();
+    expect(screen.getByText("Strava")).toBeInTheDocument();
   });
 });
