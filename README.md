@@ -14,6 +14,51 @@ Commands:
 - `npx vitest run` — unit tests
 - `PLAYWRIGHT_TEST=1 npx playwright test` — e2e tests (stop any manually-running `npm run dev` first — without `PLAYWRIGHT_TEST=1` the dev overlay intercepts clicks and e2e tests flake)
 
+### Phase 2 (Supabase backend)
+
+Phase 1 is a localStorage-only prototype. Phase 2 adds a real Supabase
+backend (Postgres + Auth, RLS on every table) plus live Whoop/Strava sync,
+switchable via `NEXT_PUBLIC_REPO_MODE` without touching any screen — see
+`docs/superpowers/specs/2026-07-09-phase-2-backend-integrations-design.md`
+for the full design and `docs/security-review-priorities.md` for the
+security-sensitive surface a future reviewer should look at first.
+
+**Local Supabase stack**
+- `npx supabase start` — boots the local stack (Postgres, Auth, Studio) via Docker; `npx supabase stop` to tear it down.
+- `npx supabase db reset` (or `npm run db:reset`) — drops and recreates the local DB from `supabase/migrations/*.sql`, then loads `supabase/seed.sql`. Run this after pulling a new migration or editing the seed.
+- `npm run db:seed:gen` — regenerates `supabase/seed.sql` from the Phase-1 TypeScript seed (`src/lib/data/seed.ts`); run after editing that seed, then `db reset` to load it.
+- `npm run test:supabase` — the stack-backed parity/RLS suites (`tests/**/*.supabase.test.ts`). Each file runs its own `db reset` in `beforeAll`, so this is serial and slow (minutes) by design — never parallelized (see `vitest.supabase.config.ts`). Requires the local stack running first.
+
+**Repo modes** — `NEXT_PUBLIC_REPO_MODE` (env var, defaults to `local`):
+- `local` — Phase-1 localStorage repo (`src/lib/data/local-repo.ts`). No Supabase, no auth gate (`src/middleware.ts` no-ops entirely in this mode). This is what the default/CI Playwright run (`PLAYWRIGHT_TEST=1 npx playwright test`, 42 tests) exercises.
+- `supabase` — real backend (`src/lib/data/supabase-repo.ts`), RLS-scoped reads/writes via the signed-in user, auth gate active. Switch by setting `NEXT_PUBLIC_REPO_MODE=supabase` (plus the Supabase env vars below) and restarting the dev server. The env-gated e2e smoke (below) runs the app in this mode automatically; it isn't something you flip for the default test run.
+
+**Env vars** (see `.env.example`; all server-only vars except the `NEXT_PUBLIC_*` ones, which are client-safe by Next.js convention):
+
+| Var | Notes |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Project/local-stack API URL. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | RLS-scoped anon key — safe client-side. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Bypasses RLS — server-only, cron/webhook/OAuth-callback code paths exclusively (see `src/lib/supabase/admin.ts`). |
+| `SUPABASE_DB_URL` | Tests only (direct `psql`/pg access for stack-backed suites). |
+| `TOKEN_ENCRYPTION_KEY` | Base64, must decode to exactly 32 bytes. Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. |
+| `CRON_SECRET` | Bearer token the morning cron route requires. |
+| `ALLOWED_EMAIL` | The single allowlisted sign-in address (`src/lib/auth/allowlist.ts`) — this app is single-tenant by design. |
+| `NEXT_PUBLIC_REPO_MODE` | `local` \| `supabase` — see Repo modes above. |
+| `WHOOP_CLIENT_ID` / `WHOOP_CLIENT_SECRET` | Whoop developer app credentials. |
+| `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` | Strava API app credentials. |
+| `STRAVA_WEBHOOK_VERIFY_TOKEN` | Shared secret Strava echoes back on webhook subscription validation. |
+| `STRAVA_SUBSCRIPTION_ID` | Set AFTER registering the webhook (below) — not known upfront. The webhook route validates every incoming event's `subscription_id` against this. |
+| `NEXT_PUBLIC_APP_URL` | This app's public base URL — used to build OAuth redirect URIs and the webhook `callback_url`. |
+
+**Cron** — `src/app/api/cron/morning/route.ts`, scheduled hourly (`vercel.json`: `0 * * * *`), not once daily at a fixed UTC hour: a UTC-fixed schedule would drift against the profile's home timezone across DST. The route runs every hour and no-ops for a profile unless that profile's LOCAL hour is exactly 6am — the trigger stays pinned to "6am local" year-round while the UTC instant it corresponds to shifts underneath it twice a year.
+
+**Strava webhook registration** — `npm run strava:register-webhook` (`scripts/register-strava-webhook.ts`). Run once, manually, after deploying — never in tests/CI. Requires `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `NEXT_PUBLIC_APP_URL`, `STRAVA_WEBHOOK_VERIFY_TOKEN` already set (Strava GETs the callback URL to validate it before the registration POST resolves). Prints the subscription id on success — set that as `STRAVA_SUBSCRIPTION_ID` in the deploy environment.
+
+**Re-anchoring the demo plan** — `npx tsx scripts/reanchor-plan.ts`. The seed's training plan is pinned to a fixed demo week; this re-dates it onto the current real week (preserving weekdays and recomputing the block-week number). **It overwrites `supabase/seed.sql`** and writes `supabase/reanchor-update.sql` (UPDATE statements for an already-seeded cloud DB — run those separately against the deployed project, e.g. via `psql "$SUPABASE_DB_URL" -f supabase/reanchor-update.sql`, or the Supabase SQL editor). Run deliberately, not as part of a routine workflow — regenerating `seed.sql` means the next `db reset` loads the re-anchored week, not the original hand-authored one.
+
+**Live smoke scripts** — `npm run smoke:whoop` / `npm run smoke:strava` (`scripts/smoke-whoop.ts` / `scripts/smoke-strava.ts`). Run manually at a ⚑ deploy checkpoint, never in CI: they load the (single) profile's real stored OAuth tokens via the admin client, call each provider's data fetcher(s) once against a recent window, and print the counts. Read-only — no writes to any table, no `sync_runs` row. Exit 0 on success, 1 on any failure (missing env / not connected / a live API error), with an actionable message identifying which. Both require `NODE_OPTIONS=--conditions=react-server` to run (the npm scripts set this for you — see each script's header comment for why: their import chain crosses `src/lib/supabase/admin.ts`, which is guarded by the `server-only` package).
+
 ## About the Design Files
 The file in this bundle (`Daily Screen Directions.dc.html`) is a **design reference created in HTML** — a prototype showing intended look and behavior, **not production code to copy directly**. It is authored as a "Design Component" and relies on the bundled `support.js` runtime only so it renders in a browser; **do not port `support.js`** or the `data-screen`/`<x-dc>` scaffolding into your app.
 
