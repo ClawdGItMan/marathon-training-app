@@ -1,4 +1,4 @@
-# Handoff: Honolulu Marathon Training App — screens & Runna-style workout detail
+# Marathon Training App
 
 ## Overview
 A dark, editorial-styled running/marathon training app. This bundle documents the full set of core screens — **Progress, Recovery, Plan, Log, Strength**, a **Daily** home screen, and the headline feature: a **Runna-inspired Workout Detail** view (session structure breakdown + AI-suggested alternative). The visual system is calm and text-forward: near-black backgrounds, one structural accent, per-session-type accent colors, generously rounded cards, and a background-free tab bar.
