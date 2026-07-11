@@ -24,6 +24,8 @@ const { getAdminClientMock } = vi.hoisted(() => ({ getAdminClientMock: vi.fn() }
 vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: getAdminClientMock }));
 
 const { GET: webhookGet, POST: webhookPost } = await import("@/app/api/webhooks/strava/route");
+const { importStravaActivity } = await import("@/lib/integrations/strava/sync");
+const { stravaActivitySchema } = await import("@/lib/integrations/strava/wire");
 const { rowToActivity } = await import("@/lib/data/row-mappers");
 
 const TABLES = ["profiles", "integration_tokens", "planned_sessions", "activities", "sync_runs"] as const;
@@ -264,5 +266,52 @@ describe("POST /api/webhooks/strava", () => {
     expect(tables.activities.rows()).toHaveLength(0);
     expect(tables.sync_runs.rows()).toHaveLength(1);
     expect(tables.sync_runs.rows()[0]).toMatchObject({ ok: false });
+  });
+});
+
+// ---- run-only session matching (fix loop 1, Fix 2) ----------------------------
+// Spec §6 scopes session matching to imported RUNS ("an imported run
+// matches a planned session if..."). Exercised on importStravaActivity
+// directly — the webhook always fetches the canonical Run fixture, so the
+// non-run path is driven at the import-orchestrator seam instead.
+
+describe("importStravaActivity sport gating", () => {
+  it("a non-run activity (Ride) is stored but never completes a same-day planned run session", async () => {
+    const { client: admin, tables } = createFakeAdmin(TABLES);
+    getAdminClientMock.mockReturnValue(admin);
+    tables.profiles.seed({ id: USER_ID, home_timezone: "America/New_York" });
+    tables.planned_sessions.seed({
+      id: "sun-long",
+      user_id: USER_ID,
+      date: "2026-07-09",
+      title: "Long run",
+      type: "long",
+      detail: null,
+      structure: [],
+      status: "planned",
+      provenance: "original",
+      payload: { distanceMi: 10 }, // exactly the ride's distance — would match if not gated
+    });
+
+    const ride = stravaActivitySchema.parse({
+      ...activityFixture,
+      id: 777000111,
+      name: "Lunch Ride",
+      type: "Ride",
+      sport_type: "Ride",
+    });
+
+    const result = await importStravaActivity(admin, USER_ID, ride);
+
+    // Stored for the record...
+    expect(result.activityId).toBeTruthy();
+    expect(tables.activities.rows()).toHaveLength(1);
+    const activity = tables.activities.rows()[0];
+    expect(activity.strava_id).toBe(777000111);
+    expect(activity.sport).toBe("Ride");
+    // ...but never matched: no matched_session_id, session untouched.
+    expect(result.matchedSessionId).toBeUndefined();
+    expect(activity.matched_session_id ?? null).toBeNull();
+    expect(tables.planned_sessions.rows().find((r) => r.id === "sun-long")!.status).toBe("planned");
   });
 });

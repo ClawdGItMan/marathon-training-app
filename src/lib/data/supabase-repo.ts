@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getBrowserClient } from "@/lib/supabase/browser";
 import { markFallback } from "@/lib/data/offline-cache";
 import { seed } from "@/lib/data/seed";
-import { RUN_EQUIVALENT_SPORTS } from "@/lib/activities/dedupe";
+import { RUN_EQUIVALENT_SPORTS } from "@/lib/activities/sports";
 import { chatMessageSchema, sessionSchema } from "@/lib/domain/schemas";
 import {
   rowToActivity,

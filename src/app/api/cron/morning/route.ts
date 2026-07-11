@@ -63,12 +63,12 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    // Whoop first, Strava second: syncStrava's dedupe (via
-    // importStravaActivity -> dedupeWhoop) only merges a Strava activity
-    // into an ALREADY-STORED Whoop row, never the reverse — running Whoop
-    // first means the common catch-up-sweep case dedupes correctly in one
-    // cron pass. See src/lib/integrations/strava/sync.ts's module comment
-    // for the known one-directional-dedupe edge case this doesn't cover.
+    // Dedupe is bidirectional as of Task 11 fix loop 1 (see
+    // src/lib/activities/dedupe.ts): a Strava import absorbs pre-existing
+    // Whoop rows AND a newly-inserted Whoop workout merges into a
+    // pre-existing Strava row — so this ordering is a convention, not a
+    // correctness requirement. Whoop-first is kept because recovery data
+    // (the readiness ring) is the morning sync's primary payload.
     await syncWhoop(admin, profile.id);
     await syncStrava(admin, profile.id);
     results.push({ userId: profile.id, synced: true });

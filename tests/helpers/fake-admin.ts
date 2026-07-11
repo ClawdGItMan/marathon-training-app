@@ -24,9 +24,14 @@ type Filter = ["eq" | "is" | "not-is", string, unknown];
 
 function matches(row: Row, filters: Filter[]): boolean {
   return filters.every(([kind, col, val]) => {
-    if (kind === "eq") return row[col] === val;
-    if (kind === "is") return row[col] === val;
-    return row[col] !== val; // "not-is"
+    // A key absent from the row object is a column the writer never set —
+    // on real Postgres that column is NULL, so filters must treat undefined
+    // as null (e.g. an imported Strava row never sets whoop_id; dedupe's
+    // `.is("whoop_id", null)` candidate filter must still see it).
+    const cell = row[col] === undefined ? null : row[col];
+    if (kind === "eq") return cell === val;
+    if (kind === "is") return cell === val;
+    return cell !== val; // "not-is"
   });
 }
 

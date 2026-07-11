@@ -47,13 +47,32 @@ function testKey(): string {
 }
 
 // ---- in-memory fake Supabase admin client ----------------------------------
-// Implements exactly the chains this task's code paths use: .select().eq()
-// [.eq()].maybeSingle(), .upsert(rows, {onConflict, ignoreDuplicates}), and
-// .insert(row). Upsert honors onConflict (match key) and ignoreDuplicates
-// (skip instead of overwrite on a match) for real, so "second sync doesn't
-// duplicate" is proven by row counts, not by inspecting call arguments.
+// Implements exactly the chains this file's code paths use: .select().eq()
+// [.eq()/.is()/.not()][.maybeSingle() | await-as-list], .upsert(rows,
+// {onConflict, ignoreDuplicates})[.select()], and .insert(row). Upsert
+// honors onConflict (match key) and ignoreDuplicates (skip instead of
+// overwrite on a match) for real, so "second sync doesn't duplicate" is
+// proven by row counts, not by inspecting call arguments.
+//
+// Fix-loop-1 HARNESS extensions (the test cases below are unchanged):
+// upsert now returns the rows it actually INSERTED (mirroring Postgres's
+// ON CONFLICT DO NOTHING ... RETURNING, which omits skipped duplicates)
+// and generates row ids like the DB's uuid default, because syncWhoop's
+// reverse dedupe trigger consumes `.upsert(...).select()`; the builder
+// grew `.is()`/`.not()` filters, an await-as-list `then`, and
+// update/delete chains for dedupeStrava's candidate query + merge path.
 
 type Row = Record<string, unknown>;
+type FakeFilter = ["eq" | "is" | "not-is", string, unknown];
+
+function rowMatches(row: Row, filters: FakeFilter[]): boolean {
+  return filters.every(([kind, col, val]) => {
+    // Missing key == NULL column on real Postgres (see tests/helpers/
+    // fake-admin.ts's matches() for the full rationale).
+    const cell = row[col] === undefined ? null : row[col];
+    return kind === "not-is" ? cell !== val : cell === val;
+  });
+}
 
 function makeTable() {
   const rows: Row[] = [];
@@ -66,44 +85,84 @@ function makeTable() {
       const incoming = Array.isArray(payload) ? payload : [payload];
       rows.push(...incoming.map((r) => ({ ...r })));
     },
-    upsert(payload: Row | Row[], opts?: { onConflict?: string; ignoreDuplicates?: boolean }) {
+    upsert(payload: Row | Row[], opts?: { onConflict?: string; ignoreDuplicates?: boolean }): Row[] {
       const incoming = Array.isArray(payload) ? payload : [payload];
       const keyCols = opts?.onConflict?.split(",") ?? [];
+      const inserted: Row[] = [];
       for (const nr of incoming) {
         const idx = rows.findIndex((r) => keyCols.every((c) => r[c] === nr[c]));
         if (idx >= 0) {
           if (!opts?.ignoreDuplicates) rows[idx] = { ...rows[idx], ...nr };
         } else {
-          rows.push({ ...nr });
+          const row = { id: nr.id ?? globalThis.crypto.randomUUID(), ...nr };
+          rows.push(row);
+          inserted.push(row);
         }
+      }
+      return inserted;
+    },
+    update(patch: Row, filters: FakeFilter[]) {
+      rows.filter((r) => rowMatches(r, filters)).forEach((r) => Object.assign(r, patch));
+    },
+    delete(filters: FakeFilter[]) {
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (rowMatches(rows[i], filters)) rows.splice(i, 1);
       }
     },
   };
 }
 
 function makeQueryBuilder(table: ReturnType<typeof makeTable>) {
-  const filters: Array<[string, unknown]> = [];
+  const filters: FakeFilter[] = [];
+  const matching = () => table.rows().filter((r) => rowMatches(r, filters));
   const builder = {
     select() {
       return builder;
     },
     eq(col: string, val: unknown) {
-      filters.push([col, val]);
+      filters.push(["eq", col, val]);
       return builder;
     },
-    maybeSingle: () =>
-      Promise.resolve({
-        data: table.rows().find((r) => filters.every(([c, v]) => r[c] === v)) ?? null,
-        error: null,
-      }),
+    is(col: string, val: unknown) {
+      filters.push(["is", col, val]);
+      return builder;
+    },
+    not(col: string, _op: "is", val: unknown) {
+      void _op;
+      filters.push(["not-is", col, val]);
+      return builder;
+    },
+    maybeSingle: () => Promise.resolve({ data: matching()[0] ?? null, error: null }),
+    then: (resolve: (v: { data: Row[]; error: null }) => void) =>
+      resolve({ data: matching(), error: null }),
     upsert: (payload: Row | Row[], opts?: { onConflict?: string; ignoreDuplicates?: boolean }) => {
-      table.upsert(payload, opts);
-      return Promise.resolve({ error: null });
+      const inserted = table.upsert(payload, opts);
+      // Thenable AND .select()-able, like real supabase-js: a bare
+      // `await ...upsert(...)` resolves {error} (recovery_snapshots path),
+      // while `...upsert(...).select()` resolves the inserted rows
+      // (activities path).
+      return {
+        select: () => Promise.resolve({ data: inserted, error: null }),
+        then: (resolve: (v: { data: null; error: null }) => void) =>
+          resolve({ data: null, error: null }),
+      };
     },
     insert: (payload: Row | Row[]) => {
       table.insert(payload);
       return Promise.resolve({ error: null });
     },
+    update: (patch: Row) => ({
+      eq: (col: string, val: unknown) => {
+        table.update(patch, [["eq", col, val]]);
+        return Promise.resolve({ error: null });
+      },
+    }),
+    delete: () => ({
+      eq: (col: string, val: unknown) => {
+        table.delete([["eq", col, val]]);
+        return Promise.resolve({ error: null });
+      },
+    }),
   };
   return builder;
 }

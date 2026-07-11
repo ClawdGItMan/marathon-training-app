@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { dedupeWhoop } from "@/lib/activities/dedupe";
 import { matchSession } from "@/lib/activities/matching";
+import { RUN_EQUIVALENT_SPORTS } from "@/lib/activities/sports";
 import { rowToSession } from "@/lib/data/row-mappers";
 import { loadTokens } from "@/lib/integrations/oauth";
 import { localDayOf } from "@/lib/sync/timezone";
@@ -13,10 +14,10 @@ import type { StravaActivity } from "./wire";
  * single idempotent entry point both the webhook route (one activity per
  * event) and `syncStrava`'s catch-up sweep (many activities per run) call —
  * upsert on `strava_id` -> dedupe against any pre-existing Whoop row for the
- * same physical run -> session matching -> `sync_runs` bookkeeping is left
- * to the CALLER (webhook route logs one row per event; `syncStrava` logs
- * one row for the whole sweep, mirroring whoop/sync.ts's `syncWhoop`
- * exactly — see `finish` below).
+ * same physical run -> session matching (runs only) -> `sync_runs`
+ * bookkeeping is left to the CALLER (webhook route logs one row per event;
+ * `syncStrava` logs one row for the whole sweep, mirroring whoop/sync.ts's
+ * `syncWhoop` exactly — see `finish` below).
  *
  * WRITE SHAPE IS THE READ CONTRACT (Task 8's hard-won lesson, carried
  * forward): the row upserted here must parse through row-mappers.ts's
@@ -24,19 +25,13 @@ import type { StravaActivity } from "./wire";
  * tests/unit/strava-webhook.test.ts, mirroring whoop-sync.test.ts's
  * precedent.
  *
- * Dedupe is ONE-DIRECTIONAL by construction: only a Strava import ever
- * calls `dedupeWhoop` (looking for a pre-existing Whoop-only row to merge
- * into). Task 8's `syncWhoop` never calls it (that file is out of this
- * task's scope, and Task 8 predates Task 11 — see its own comment: "Strava/
- * Whoop cross-source dedupe is Task 11"). Known consequence, not fixed
- * here: if a Strava webhook imports a run BEFORE the next Whoop sync
- * writes the matching workout, that later Whoop sync inserts its own
- * unmerged row (whoop_id set, strava_id null) that nothing ever revisits —
- * dedupe only fires at Strava-import time. In practice the morning cron
- * runs `syncWhoop` before `syncStrava` (see cron/morning/route.ts), so the
- * common catch-up-sweep path merges correctly; only a Strava-webhook-before-
- * next-Whoop-sync ordering can leave a stray duplicate. Flagged for a
- * future task, not silently ignored.
+ * Dedupe is BIDIRECTIONAL as of fix loop 1: this import path triggers the
+ * forward direction (`dedupeWhoop`: a new Strava row absorbs a
+ * pre-existing Whoop-only row), and whoop/sync.ts's `syncWhoop` triggers
+ * the reverse (`dedupeStrava`: a newly-inserted Whoop workout merges into
+ * a pre-existing Strava row) — same merge implementation, same provenance
+ * (the Strava row always survives). See dedupe.ts's module comment for why
+ * the reverse trigger is necessary (the webhook-first ordering hole).
  */
 
 export type SyncResult = { ok: boolean; items: number; detail?: string };
@@ -53,9 +48,10 @@ const upsertedActivityRowSchema = z.object({
 
 /**
  * Upserts one Strava activity into `activities` (idempotent on
- * `strava_id`), runs Whoop dedupe, then session matching — a match sets the
- * planned session `completed` and stamps `activities.matched_session_id`.
- * Never writes `sync_runs`; callers own that (see module doc comment).
+ * `strava_id`), runs Whoop dedupe, then — for run-equivalent sports ONLY —
+ * session matching: a match sets the planned session `completed` and
+ * stamps `activities.matched_session_id`. Never writes `sync_runs`;
+ * callers own that (see module doc comment).
  */
 export async function importStravaActivity(
   admin: SupabaseClient,
@@ -85,6 +81,14 @@ export async function importStravaActivity(
   const upserted = upsertedActivityRowSchema.parse(data);
 
   await dedupeWhoop(admin, userId, upserted);
+
+  // Fix loop 1 (Fix 2): spec §6 scopes session matching to imported RUNS
+  // ("an imported run matches a planned session if..."). A non-run activity
+  // (Ride, Swim, ...) is stored for the record but must never complete a
+  // planned run session, however close its distance lands to one.
+  if (!RUN_EQUIVALENT_SPORTS.has(activity.sport_type)) {
+    return { activityId: upserted.id };
+  }
 
   const tz = await loadHomeTimezone(admin, userId);
   const localDay = localDayOf(startedAt, tz);

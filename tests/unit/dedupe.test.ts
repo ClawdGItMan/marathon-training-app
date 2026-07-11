@@ -1,25 +1,39 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it } from "vitest";
+import { randomBytes } from "node:crypto";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { encryptToken } from "@/lib/crypto/token-cipher";
 import { createFakeAdmin } from "../helpers/fake-admin";
+import stravaActivityFixture from "../fixtures/strava/activity.json";
+import whoopWorkoutFixture from "../fixtures/whoop/workout.json";
 
 /**
  * Behavioral tests for Task 11's Whoop/Strava dedupe (spec §6, verbatim in
- * task-11-brief.md's Interfaces section): a Whoop activity and a Strava
- * activity are the same physical run when sport is run-equivalent AND
- * their start/end windows overlap by >= 0.5 of the SHORTER window. Merge
- * keeps Strava's distance/pace fields, adopts Whoop's strain/HR fields, and
- * deletes the now-redundant Whoop-only row.
+ * task-11-brief.md's Interfaces section; BIDIRECTIONAL as of fix loop 1):
+ * a Whoop activity and a Strava activity are the same physical run when
+ * sport is run-equivalent AND their start/end windows overlap by >= 0.5 of
+ * the SHORTER window. The merge always survives as the Strava row (keeps
+ * distance/pace, absorbs whoop_id/strain/HR); the redundant Whoop-only row
+ * is deleted.
  *
- * `overlapRatio` is pure (no DB); `dedupeWhoop` touches `activities` via the
- * admin client, so it's tested against `createFakeAdmin` (tests/helpers).
+ * `overlapRatio` is pure (no DB); `dedupeWhoop`/`dedupeStrava` touch
+ * `activities` via the admin client, so they're tested against
+ * `createFakeAdmin` (tests/helpers). The reverse-trigger describe block at
+ * the bottom exercises the FULL webhook-first ordering flow end-to-end:
+ * real `importStravaActivity`, then real `syncWhoop` (fetch-mocked at the
+ * HTTP boundary, real token decryption via a mocked `getAdminClient` — the
+ * same approach as whoop-sync.test.ts) — proving the fix for the ordering
+ * hole where a Strava webhook import lands before the overnight Whoop sync
+ * and the forward-only dedupe could never merge the pair.
  */
 
-const { overlapRatio, dedupeWhoop, RUN_EQUIVALENT_SPORTS } = await import("@/lib/activities/dedupe");
+const { getAdminClientMock } = vi.hoisted(() => ({ getAdminClientMock: vi.fn() }));
+vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: getAdminClientMock }));
 
-afterEach(() => {
-  // no globals stubbed in this file today, but keep the harness consistent
-  // with the rest of the Task 11 suite in case that changes.
-});
+const { overlapRatio, dedupeWhoop, dedupeStrava } = await import("@/lib/activities/dedupe");
+const { RUN_EQUIVALENT_SPORTS } = await import("@/lib/activities/sports");
+const { importStravaActivity } = await import("@/lib/integrations/strava/sync");
+const { syncWhoop } = await import("@/lib/integrations/whoop/sync");
+const { stravaActivitySchema } = await import("@/lib/integrations/strava/wire");
 
 describe("RUN_EQUIVALENT_SPORTS", () => {
   it("includes Strava's Run/TrailRun/VirtualRun sport_type values and Whoop's lowercase 'running' sport_name", () => {
@@ -272,5 +286,197 @@ describe("dedupeWhoop", () => {
     await dedupeWhoop(admin, userId, imported);
 
     expect(table.rows()).toHaveLength(2);
+  });
+});
+
+// ---- reverse trigger: dedupeStrava via syncWhoop (fix loop 1) -----------------
+// End-to-end proof of the webhook-first ordering fix: a Strava activity is
+// imported FIRST (as the webhook would), then syncWhoop runs with the
+// overnight Whoop workout — the newly-inserted Whoop row must merge into
+// the pre-existing Strava row at insertion time, because the morning sweep
+// can never heal this case (the webhook's own ok sync_runs row advances
+// lastOkStravaSync past the activity's start, so it is never re-imported).
+
+const REVERSE_TABLES = [
+  "profiles",
+  "integration_tokens",
+  "planned_sessions",
+  "activities",
+  "recovery_snapshots",
+  "sync_runs",
+] as const;
+
+const REVERSE_USER = "user-1";
+
+// stravaActivityFixture: start 2026-07-09T11:03:51Z, elapsed 4600s -> ends
+// ~12:20:31Z. This Whoop window (11:05-12:15Z) sits fully inside it ->
+// overlap ratio 1.0 of the shorter (70min) window.
+const OVERLAPPING_WHOOP_WORKOUT = {
+  ...whoopWorkoutFixture.records[0],
+  start: "2026-07-09T11:05:00.000Z",
+  end: "2026-07-09T12:15:00.000Z",
+};
+
+function seedWhoopConnectedUser(tables: ReturnType<typeof createFakeAdmin<(typeof REVERSE_TABLES)[number]>>["tables"]) {
+  tables.profiles.seed({ id: REVERSE_USER, home_timezone: "America/New_York" });
+  const encrypted = encryptToken(JSON.stringify({ access: "access-tok", refresh: "refresh-tok" }));
+  tables.integration_tokens.seed({
+    user_id: REVERSE_USER,
+    provider: "whoop",
+    ciphertext: encrypted.ciphertext,
+    iv: encrypted.iv,
+    tag: encrypted.tag,
+    expires_at: "2026-08-01T00:00:00.000Z",
+    athlete_ref: null,
+  });
+}
+
+function seedPlannedLongRun(tables: ReturnType<typeof createFakeAdmin<(typeof REVERSE_TABLES)[number]>>["tables"]) {
+  tables.planned_sessions.seed({
+    id: "sun-long",
+    user_id: REVERSE_USER,
+    date: "2026-07-09",
+    title: "Long run",
+    type: "long",
+    detail: null,
+    structure: [],
+    status: "planned",
+    provenance: "original",
+    payload: { distanceMi: 10 },
+  });
+}
+
+/** Empty recovery/sleep/cycle collections; `workoutRecords` from the workout endpoint. */
+function installWhoopFetchMock(workoutRecords: unknown[]) {
+  const empty = { records: [], next_token: null };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL) => {
+      const url = new URL(input.toString());
+      const body = url.pathname.endsWith("/activity/workout")
+        ? { records: workoutRecords, next_token: null }
+        : empty;
+      return { ok: true, status: 200, statusText: "OK", json: async () => body };
+    })
+  );
+}
+
+describe("reverse trigger: dedupeStrava via syncWhoop (webhook-first ordering)", () => {
+  beforeEach(() => {
+    vi.stubEnv("TOKEN_ENCRYPTION_KEY", randomBytes(32).toString("base64"));
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("webhook-first end-to-end: importStravaActivity then syncWhoop with an overlapping workout -> ONE merged row, Strava distance + Whoop strain, matched session unaffected", async () => {
+    const { client: admin, tables } = createFakeAdmin(REVERSE_TABLES);
+    getAdminClientMock.mockReturnValue(admin);
+    seedWhoopConnectedUser(tables);
+    seedPlannedLongRun(tables);
+
+    // 1. Webhook-first: the Strava run arrives and matches its session.
+    const imported = await importStravaActivity(
+      admin,
+      REVERSE_USER,
+      stravaActivitySchema.parse(stravaActivityFixture)
+    );
+    expect(imported.matchedSessionId).toBe("sun-long");
+    expect(tables.activities.rows()).toHaveLength(1);
+
+    // 2. Overnight Whoop sync delivers the same physical run.
+    installWhoopFetchMock([OVERLAPPING_WHOOP_WORKOUT]);
+    const result = await syncWhoop(admin, REVERSE_USER, {});
+    expect(result.ok).toBe(true);
+
+    // Exactly ONE row survives: the Strava row, now carrying Whoop's fields.
+    expect(tables.activities.rows()).toHaveLength(1);
+    const merged = tables.activities.rows()[0];
+    expect(merged.strava_id).toBe(stravaActivityFixture.id);
+    expect(merged.distance_m).toBe(16093); // Strava source of truth
+    expect(merged.moving_sec).toBe(4517);
+    expect(merged.whoop_id).toBe(OVERLAPPING_WHOOP_WORKOUT.id); // absorbed
+    expect(merged.strain).toBe(11.8);
+    expect(merged.hr_zones).toMatchObject({ zone_two_milli: 900000 });
+    // The session match is untouched by the merge.
+    expect(merged.matched_session_id).toBe("sun-long");
+    expect(tables.planned_sessions.rows().find((r) => r.id === "sun-long")!.status).toBe("completed");
+  });
+
+  it("a NON-overlapping same-day whoop workout does not merge -> two rows", async () => {
+    const { client: admin, tables } = createFakeAdmin(REVERSE_TABLES);
+    getAdminClientMock.mockReturnValue(admin);
+    seedWhoopConnectedUser(tables);
+
+    await importStravaActivity(admin, REVERSE_USER, stravaActivitySchema.parse(stravaActivityFixture));
+
+    // The canonical fixture's window is 13:02-14:01Z — same local day, but
+    // zero overlap with the Strava run's 11:03-12:20Z window.
+    installWhoopFetchMock([whoopWorkoutFixture.records[0]]);
+    const result = await syncWhoop(admin, REVERSE_USER, {});
+    expect(result.ok).toBe(true);
+
+    expect(tables.activities.rows()).toHaveLength(2);
+    const whoopRow = tables.activities.rows().find((r) => r.whoop_id);
+    expect(whoopRow?.strava_id).toBeUndefined();
+  });
+
+  it("reverse trigger respects run-equivalence: an overlapping whoop BIKE workout never merges into a Strava run", async () => {
+    const { client: admin, tables } = createFakeAdmin(REVERSE_TABLES);
+    getAdminClientMock.mockReturnValue(admin);
+    seedWhoopConnectedUser(tables);
+
+    await importStravaActivity(admin, REVERSE_USER, stravaActivitySchema.parse(stravaActivityFixture));
+
+    installWhoopFetchMock([{ ...OVERLAPPING_WHOOP_WORKOUT, sport_name: "cycling" }]);
+    const result = await syncWhoop(admin, REVERSE_USER, {});
+    expect(result.ok).toBe(true);
+
+    expect(tables.activities.rows()).toHaveLength(2);
+  });
+
+  it("dedupeStrava skips a Strava row that already carries a whoop_id (already merged with its twin)", async () => {
+    const { client: admin, tables } = createFakeAdmin(["activities"]);
+    tables.activities.seed({
+      id: "strava-row-id",
+      user_id: REVERSE_USER,
+      strava_id: 1,
+      whoop_id: "already-merged-whoop-id",
+      sport: "Run",
+      started_at: "2026-07-09T11:05:00.000Z",
+      ended_at: "2026-07-09T12:15:00.000Z",
+      payload: {},
+    });
+    tables.activities.seed({
+      id: "new-whoop-row",
+      user_id: REVERSE_USER,
+      strava_id: null,
+      whoop_id: "second-whoop-id",
+      sport: "running",
+      started_at: "2026-07-09T11:05:00.000Z",
+      ended_at: "2026-07-09T12:15:00.000Z",
+      payload: {},
+    });
+
+    await dedupeStrava(admin, REVERSE_USER, {
+      id: "new-whoop-row",
+      sport: "running",
+      started_at: "2026-07-09T11:05:00.000Z",
+      ended_at: "2026-07-09T12:15:00.000Z",
+      whoop_id: "second-whoop-id",
+      strain: 9.1,
+      avg_hr: 140,
+      max_hr: 165,
+      hr_zones: null,
+    });
+
+    // No merge: both rows survive, the merged row's whoop_id is untouched.
+    expect(tables.activities.rows()).toHaveLength(2);
+    expect(tables.activities.rows().find((r) => r.id === "strava-row-id")!.whoop_id).toBe(
+      "already-merged-whoop-id"
+    );
   });
 });

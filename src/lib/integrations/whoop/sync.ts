@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { dedupeStrava, whoopSideRowSchema } from "@/lib/activities/dedupe";
 import { loadTokens } from "@/lib/integrations/oauth";
 import { localDayOf } from "@/lib/sync/timezone";
 import {
@@ -188,11 +189,29 @@ export async function syncWhoop(
       // whoop_id is globally unique (see 0001_schema.sql); ignoreDuplicates
       // turns this into ON CONFLICT DO NOTHING, so a whoop_id that already
       // exists is silently skipped rather than erroring or duplicating —
-      // idempotent re-sync. Strava/Whoop cross-source dedupe is Task 11.
-      const { error } = await admin
+      // idempotent re-sync. The `.select()` makes Postgres RETURN exactly
+      // the rows it actually INSERTED (ON CONFLICT DO NOTHING ... RETURNING
+      // omits skipped duplicates) — which is precisely the set that must be
+      // checked against pre-existing Strava rows below, with no rescan of
+      // already-processed workouts on every morning sync.
+      const { data, error } = await admin
         .from("activities")
-        .upsert(activityRows, { onConflict: "whoop_id", ignoreDuplicates: true });
+        .upsert(activityRows, { onConflict: "whoop_id", ignoreDuplicates: true })
+        .select();
       if (error) throw error;
+
+      // Reverse dedupe trigger (Task 11 fix loop 1): each NEWLY-inserted
+      // run-equivalent workout checks for a pre-existing overlapping Strava
+      // row and merges into it (the Strava row survives; this Whoop row is
+      // deleted) — closing the webhook-first ordering hole where a Strava
+      // webhook import lands before the Whoop workout ever syncs, which the
+      // forward-only dedupe could never heal (see dedupe.ts's module
+      // comment). No-ops per row when nothing overlaps or the sport isn't
+      // run-equivalent, so pre-fix behavior is unchanged in those cases.
+      const inserted = z.array(whoopSideRowSchema).parse(data ?? []);
+      for (const row of inserted) {
+        await dedupeStrava(admin, userId, row);
+      }
     }
 
     return finish(admin, userId, { ok: true, items: snapshots.length + activityRows.length });
