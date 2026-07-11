@@ -1,9 +1,8 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { decryptToken, encryptToken } from "@/lib/crypto/token-cipher";
 import { getAdminClient } from "@/lib/supabase/admin";
-import { getServerClient } from "@/lib/supabase/server";
 
 /**
  * Shared OAuth plumbing used by both the Whoop and Strava connect/callback
@@ -53,12 +52,30 @@ export async function makeState(): Promise<string> {
  * Throws unless `cookieVal` (read from the `OAUTH_STATE_COOKIE` cookie) and
  * `param` (the callback's `state` query param) are both present and equal.
  * Pure comparison — callers own reading the cookie/query param.
+ *
+ * Uses `timingSafeEqual` instead of `!==` so a mismatching state value can't
+ * be distinguished by comparison timing (defense in depth: `state` is a
+ * high-entropy random token, not a secret an attacker could brute force via
+ * timing alone, but the safe comparison costs nothing here). Byte length is
+ * checked first — `timingSafeEqual` throws on unequal-length buffers, so an
+ * unequal length is routed to the same "state mismatch" error rather than
+ * letting that exception leak past this function.
  */
 export function assertState(
   cookieVal: string | null | undefined,
   param: string | null | undefined
 ): void {
-  if (!cookieVal || !param || cookieVal !== param) {
+  if (!cookieVal || !param) {
+    throw new Error("OAuth state mismatch: missing or non-matching state parameter.");
+  }
+
+  const cookieBuf = Buffer.from(cookieVal, "utf8");
+  const paramBuf = Buffer.from(param, "utf8");
+
+  if (
+    cookieBuf.length !== paramBuf.length ||
+    !timingSafeEqual(cookieBuf, paramBuf)
+  ) {
     throw new Error("OAuth state mismatch: missing or non-matching state parameter.");
   }
 }
@@ -69,9 +86,12 @@ export function assertState(
 // getAdminClient(). The row's single ciphertext/iv/tag triple encrypts a
 // JSON payload of {access, refresh} together; expiresAt/athleteRef are
 // stored in their own plaintext columns (not secret). The caller's identity
-// comes from the request's own session (getServerClient().auth.getUser()),
-// not a passed-in id — every caller (Whoop/Strava callback routes) already
-// runs inside that same authenticated request.
+// is passed in explicitly as `userId` rather than resolved from the request
+// session: saveTokens/loadTokens are also called from cron and webhook route
+// handlers (token refresh, provider webhooks) that have no user session to
+// read cookies from — that's exactly why they use the service-role admin
+// client instead of the RLS-scoped one. OAuth callback routes (Tasks 7/10)
+// resolve the session user themselves and pass the id in here.
 
 const tokenPayloadSchema = z.object({
   access: z.string(),
@@ -86,21 +106,13 @@ const tokenRowSchema = z.object({
   athlete_ref: z.string().nullable(),
 });
 
-async function getCurrentUserId(): Promise<string> {
-  const client = await getServerClient();
-  const { data, error } = await client.auth.getUser();
-
-  if (error || !data.user) {
-    throw new Error("oauth: no authenticated user in the current session.");
-  }
-
-  return data.user.id;
-}
-
-/** Encrypts and upserts `tokens` for `provider`, keyed to the session's user. */
-export async function saveTokens(provider: Provider, tokens: TokenBundle): Promise<void> {
+/** Encrypts and upserts `tokens` for `userId`/`provider`. */
+export async function saveTokens(
+  userId: string,
+  provider: Provider,
+  tokens: TokenBundle
+): Promise<void> {
   const parsedProvider = providerSchema.parse(provider);
-  const userId = await getCurrentUserId();
 
   const payload: z.infer<typeof tokenPayloadSchema> = {
     access: tokens.access,
@@ -127,10 +139,12 @@ export async function saveTokens(provider: Provider, tokens: TokenBundle): Promi
   if (error) throw error;
 }
 
-/** Loads and decrypts the session user's tokens for `provider`, or null if never connected. */
-export async function loadTokens(provider: Provider): Promise<TokenBundle | null> {
+/** Loads and decrypts `userId`'s tokens for `provider`, or null if never connected. */
+export async function loadTokens(
+  userId: string,
+  provider: Provider
+): Promise<TokenBundle | null> {
   const parsedProvider = providerSchema.parse(provider);
-  const userId = await getCurrentUserId();
 
   const { data, error } = await getAdminClient()
     .from("integration_tokens")

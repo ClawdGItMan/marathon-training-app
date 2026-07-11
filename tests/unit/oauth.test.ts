@@ -6,25 +6,24 @@ import { encryptToken } from "@/lib/crypto/token-cipher";
 /**
  * Behavioral tests for src/lib/integrations/oauth.ts — the shared CSRF-state
  * cookie helpers and the encrypted token store used by both the Whoop and
- * Strava connect/callback routes (Tasks 7/10).
+ * Strava connect/callback routes (Tasks 7/10), plus cron/webhook handlers
+ * that call saveTokens/loadTokens with no user session (hence the explicit
+ * `userId` parameter rather than session resolution).
  *
- * `@/lib/supabase/server` and `@/lib/supabase/admin` are mocked so this file
- * runs without the Supabase stack or real cookies; `next/headers` is mocked
- * for the same reason (`makeState` sets a real httpOnly cookie in
- * production). `token-cipher` is NOT mocked — saveTokens/loadTokens are
- * exercised against the real AES-256-GCM implementation so the tests prove
- * actual encryption/decryption happens, not just that the right functions
- * were called.
+ * `@/lib/supabase/admin` is mocked so this file runs without the Supabase
+ * stack; `next/headers` is mocked for the same reason (`makeState` sets a
+ * real httpOnly cookie in production). `token-cipher` is NOT mocked —
+ * saveTokens/loadTokens are exercised against the real AES-256-GCM
+ * implementation so the tests prove actual encryption/decryption happens,
+ * not just that the right functions were called.
  */
 
-const { cookiesMock, getServerClientMock, getAdminClientMock } = vi.hoisted(() => ({
+const { cookiesMock, getAdminClientMock } = vi.hoisted(() => ({
   cookiesMock: vi.fn(),
-  getServerClientMock: vi.fn(),
   getAdminClientMock: vi.fn(),
 }));
 
 vi.mock("next/headers", () => ({ cookies: cookiesMock }));
-vi.mock("@/lib/supabase/server", () => ({ getServerClient: getServerClientMock }));
 vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: getAdminClientMock }));
 
 const { assertState, loadTokens, makeState, OAUTH_STATE_COOKIE, saveTokens } = await import(
@@ -49,25 +48,21 @@ function makeAdminClientMock(opts: {
   return { from, upsert, select, eq1, eq2, maybeSingle };
 }
 
-function mockAuthedUser(userId: string | null) {
-  getServerClientMock.mockResolvedValue({
-    auth: {
-      getUser: vi.fn().mockResolvedValue(
-        userId
-          ? { data: { user: { id: userId } }, error: null }
-          : { data: { user: null }, error: null }
-      ),
-    },
-  });
-}
-
 describe("assertState", () => {
   it("does not throw when the cookie value matches the query param", () => {
     expect(() => assertState("abc123", "abc123")).not.toThrow();
   });
 
-  it("throws when the cookie value and query param mismatch", () => {
-    expect(() => assertState("abc123", "different")).toThrow();
+  it("throws when the cookie value and query param mismatch (same length)", () => {
+    expect(() => assertState("abc123", "xyz789")).toThrow(
+      /state mismatch/i
+    );
+  });
+
+  it("throws when the cookie value and query param mismatch (different length)", () => {
+    expect(() => assertState("abc123", "abc1234567")).toThrow(
+      /state mismatch/i
+    );
   });
 
   it("throws when the cookie value is missing", () => {
@@ -78,6 +73,11 @@ describe("assertState", () => {
   it("throws when the query param is missing", () => {
     expect(() => assertState("abc123", undefined)).toThrow();
     expect(() => assertState("abc123", null)).toThrow();
+  });
+
+  it("throws when both are missing", () => {
+    expect(() => assertState(undefined, undefined)).toThrow();
+    expect(() => assertState(null, null)).toThrow();
   });
 });
 
@@ -116,12 +116,11 @@ describe("saveTokens / loadTokens", () => {
     vi.clearAllMocks();
   });
 
-  it("saveTokens upserts encrypted fields (never the plaintext tokens) via the admin client", async () => {
-    mockAuthedUser("user-123");
+  it("saveTokens upserts encrypted fields (never the plaintext tokens), scoped to the passed-in userId", async () => {
     const admin = makeAdminClientMock({});
     getAdminClientMock.mockReturnValue(admin);
 
-    await saveTokens("whoop", {
+    await saveTokens("user-123", "whoop", {
       access: "whoop-access-plaintext",
       refresh: "whoop-refresh-plaintext",
       expiresAt: "2026-08-01T00:00:00.000Z",
@@ -148,8 +147,31 @@ describe("saveTokens / loadTokens", () => {
     expect(upsertOpts).toMatchObject({ onConflict: "user_id,provider" });
   });
 
-  it("loadTokens decrypts the stored row back into the original access/refresh tokens", async () => {
-    mockAuthedUser("user-123");
+  it("saveTokens scopes different users to different rows (no shared-user cross talk)", async () => {
+    const admin = makeAdminClientMock({});
+    getAdminClientMock.mockReturnValue(admin);
+
+    await saveTokens("user-123", "whoop", {
+      access: "a1",
+      refresh: "r1",
+      expiresAt: null,
+      athleteRef: null,
+    });
+    await saveTokens("user-456", "whoop", {
+      access: "a2",
+      refresh: "r2",
+      expiresAt: null,
+      athleteRef: null,
+    });
+
+    expect(admin.upsert).toHaveBeenCalledTimes(2);
+    const [firstRow] = admin.upsert.mock.calls[0];
+    const [secondRow] = admin.upsert.mock.calls[1];
+    expect(firstRow.user_id).toBe("user-123");
+    expect(secondRow.user_id).toBe("user-456");
+  });
+
+  it("loadTokens decrypts the stored row back into the original access/refresh tokens, scoped by the passed-in userId", async () => {
     const encrypted = encryptToken(JSON.stringify({ access: "a-tok", refresh: "r-tok" }));
     const admin = makeAdminClientMock({
       selectResult: {
@@ -165,9 +187,14 @@ describe("saveTokens / loadTokens", () => {
     });
     getAdminClientMock.mockReturnValue(admin);
 
-    const result = await loadTokens("strava");
+    const result = await loadTokens("user-123", "strava");
 
     expect(admin.from).toHaveBeenCalledWith("integration_tokens");
+    expect(admin.select).toHaveBeenCalledWith(
+      "ciphertext, iv, tag, expires_at, athlete_ref"
+    );
+    expect(admin.eq1).toHaveBeenCalledWith("user_id", "user-123");
+    expect(admin.eq2).toHaveBeenCalledWith("provider", "strava");
     expect(result).toEqual({
       access: "a-tok",
       refresh: "r-tok",
@@ -177,24 +204,9 @@ describe("saveTokens / loadTokens", () => {
   });
 
   it("loadTokens returns null when no row exists for the user/provider", async () => {
-    mockAuthedUser("user-123");
     const admin = makeAdminClientMock({ selectResult: { data: null, error: null } });
     getAdminClientMock.mockReturnValue(admin);
 
-    expect(await loadTokens("whoop")).toBeNull();
-  });
-
-  it("saveTokens throws when there is no authenticated user in session", async () => {
-    mockAuthedUser(null);
-    getAdminClientMock.mockReturnValue(makeAdminClientMock({}));
-
-    await expect(
-      saveTokens("whoop", {
-        access: "a",
-        refresh: "r",
-        expiresAt: null,
-        athleteRef: null,
-      })
-    ).rejects.toThrow();
+    expect(await loadTokens("user-123", "whoop")).toBeNull();
   });
 });
