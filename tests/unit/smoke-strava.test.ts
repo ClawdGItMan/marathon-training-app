@@ -13,7 +13,7 @@ import type { StravaSmokeDeps } from "../../scripts/smoke-strava";
 const { getAdminClientMock } = vi.hoisted(() => ({ getAdminClientMock: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: getAdminClientMock }));
 
-const { runStravaSmoke } = await import("../../scripts/smoke-strava");
+const { runStravaSmoke, productionDeps } = await import("../../scripts/smoke-strava");
 
 const FULL_ENV = {
   NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321",
@@ -130,5 +130,24 @@ describe("runStravaSmoke", () => {
     expect(result.message).toContain("activities: 2");
     expect(result.message).toContain("getActivity(42)");
     expect(deps.getActivity).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1" }), 42);
+  });
+});
+
+describe("productionDeps", () => {
+  it("wires the shared fetchers and loadTokens (the rotation-persisting path), not bespoke fetch code", async () => {
+    // Structural pin for the header's "read-only for business data, MAY
+    // rotate tokens" contract — the qualified claim only holds while the
+    // CLI wiring stays on the shared fetchers whose 401-refresh persists a
+    // rotated token pair via oauth.ts's fetchWithAutoRefresh. The rotation
+    // behavior itself is pinned once, behaviorally, in smoke-whoop.test.ts
+    // (the path is the same shared function for both providers).
+    const oauth = await import("@/lib/integrations/oauth");
+    const stravaClient = await import("@/lib/integrations/strava/client");
+
+    const deps = productionDeps();
+
+    expect(deps.loadTokens).toBe(oauth.loadTokens);
+    expect(deps.listActivities).toBe(stravaClient.listActivities);
+    expect(deps.getActivity).toBe(stravaClient.getActivity);
   });
 });

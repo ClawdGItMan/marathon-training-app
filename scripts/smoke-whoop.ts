@@ -16,7 +16,6 @@
  *   `index.js`. Next's build sets that condition itself; a bare CLI
  *   invocation must set it explicitly, hence the npm script.)
  *
-
  * Loads the sole profile's stored Whoop tokens via the admin client
  * (bypassing RLS — same access pattern as the cron sync and the webhook
  * route; see src/lib/supabase/admin.ts), then calls all four v2 collection
@@ -24,12 +23,24 @@
  * smoke check, not a full historical pull — see scripts/lib/smoke.ts), and
  * prints the record count each returned.
  *
- * READ-ONLY: this script never writes to any table — no `sync_runs` row,
- * no upsert. It exists purely to prove live connectivity end to end (the
- * stored OAuth token is still valid, refreshing it still works, and
- * whoop/wire.ts's Zod schemas still match Whoop's actual response shape)
- * without touching production data. For an actual sync, use the cron route
- * or the Settings screen, not this script.
+ * READ-ONLY FOR BUSINESS DATA: this script never writes to activities,
+ * recovery_snapshots, planned_sessions, sync_runs, or any other app table —
+ * no sync bookkeeping, no upserts. The ONE write it may perform: if the
+ * stored access token has expired, the shared auto-refresh path (oauth.ts's
+ * `fetchWithAutoRefresh` — the exact same path the cron sync uses) rotates
+ * the token pair and persists it to `integration_tokens` before retrying.
+ * That persist is required, not optional: Whoop rotates the refresh token
+ * on every use, so refreshing without persisting would brick the stored
+ * connection, and failing closed on a 401 would make this smoke report
+ * failure for a perfectly healthy integration whose access token merely
+ * expired — a false negative at exactly the deploy-checkpoint moment it
+ * exists for. So a smoke run after token expiry both succeeds AND updates
+ * the stored tokens — by design. The script exists to prove live
+ * connectivity end to end (the stored OAuth token is still usable,
+ * refreshing it still works, and whoop/wire.ts's Zod schemas still match
+ * Whoop's actual response shape) without touching production business
+ * data. For an actual sync, use the cron route or the Settings screen, not
+ * this script.
  *
  * Exit codes: 0 on success (all four fetchers returned, counts printed to
  * stdout); 1 on any failure — missing env, no profile/no stored tokens, or
@@ -37,8 +48,6 @@
  * which.
  */
 
-import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { loadTokens } from "@/lib/integrations/oauth";
@@ -52,10 +61,12 @@ import {
 import {
   envErrorMessage,
   errorMessage,
+  isMainModule,
   missingEnvVars,
   requireSoleProfileId,
   smokeSinceDate,
   type EnvLike,
+  type SmokeResult,
 } from "./lib/smoke";
 
 /**
@@ -73,8 +84,6 @@ const REQUIRED_ENV = [
   "WHOOP_CLIENT_ID",
   "WHOOP_CLIENT_SECRET",
 ] as const;
-
-export type SmokeResult = { ok: boolean; message: string };
 
 export type WhoopSmokeDeps = {
   admin: SupabaseClient;
@@ -141,7 +150,15 @@ export async function runWhoopSmoke(deps: WhoopSmokeDeps, env: EnvLike = process
   }
 }
 
-function productionDeps(): WhoopSmokeDeps {
+/**
+ * The CLI entry point's real wiring. Exported (though only `main()` below
+ * calls it at runtime) so tests/unit/smoke-whoop.test.ts can structurally
+ * pin that the smoke run funnels through the SHARED fetchers/loadTokens —
+ * the ones whose 401-refresh path persists a rotated token pair — rather
+ * than some bespoke fetch that would silently invalidate the header
+ * comment's "read-only for business data, may rotate tokens" contract.
+ */
+export function productionDeps(): WhoopSmokeDeps {
   return {
     admin: getAdminClient(),
     loadTokens,
@@ -150,16 +167,6 @@ function productionDeps(): WhoopSmokeDeps {
     fetchWhoopCycles,
     fetchWhoopWorkouts,
   };
-}
-
-function isMainModule(): boolean {
-  const entry = process.argv[1];
-  if (!entry) return false;
-  try {
-    return fileURLToPath(import.meta.url) === resolve(entry);
-  } catch {
-    return false;
-  }
 }
 
 async function main(): Promise<void> {
@@ -183,7 +190,7 @@ async function main(): Promise<void> {
   process.exit(result.ok ? 0 : 1);
 }
 
-if (isMainModule()) {
+if (isMainModule(import.meta.url)) {
   main().catch((err) => {
     console.error(errorMessage(err));
     process.exit(1);

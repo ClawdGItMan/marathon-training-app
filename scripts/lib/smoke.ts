@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -101,4 +103,24 @@ export function errorMessage(err: unknown): string {
     return (err as { message: string }).message;
   }
   return String(err);
+}
+
+/** The shape both smoke scripts' `run*Smoke` functions resolve to — never a throw; `main()` maps it to exit 0/1. */
+export type SmokeResult = { ok: boolean; message: string };
+
+/**
+ * True when the module at `moduleUrl` (pass `import.meta.url`) is the
+ * process's CLI entry point — i.e. `npx tsx scripts/<that-file>.ts` — as
+ * opposed to being imported by a test. The caller passes its own
+ * `import.meta.url` because evaluating it here would always name THIS
+ * file, never the script asking the question.
+ */
+export function isMainModule(moduleUrl: string): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return fileURLToPath(moduleUrl) === resolve(entry);
+  } catch {
+    return false;
+  }
 }

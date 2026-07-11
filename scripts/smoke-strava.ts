@@ -10,7 +10,6 @@
  *   required, not optional; see scripts/smoke-whoop.ts's header comment
  *   for the full reason, which applies identically here.)
  *
-
  * Loads the sole profile's stored Strava tokens via the admin client
  * (bypassing RLS — same access pattern as the cron sync and the webhook
  * route; see src/lib/supabase/admin.ts), then:
@@ -25,20 +24,28 @@
  *      zero-activity window skips this (reported, not a failure: an
  *      inactive-for-30-days account is a valid state, not a broken one).
  *
- * READ-ONLY: this script never writes to any table — no `sync_runs` row,
- * no upsert. It exists purely to prove live connectivity end to end (the
- * stored OAuth token is still valid, refreshing it still works, and
- * strava/wire.ts's Zod schemas still match Strava's actual response shape)
- * without touching production data. For an actual import, use the webhook
- * route, the cron route, or the Settings screen, not this script.
+ * READ-ONLY FOR BUSINESS DATA: this script never writes to activities,
+ * recovery_snapshots, planned_sessions, sync_runs, or any other app table —
+ * no sync bookkeeping, no upserts. The ONE write it may perform: if the
+ * stored access token has expired, the shared auto-refresh path (oauth.ts's
+ * `fetchWithAutoRefresh` — the exact same path the cron sync uses) rotates
+ * the token pair and persists it to `integration_tokens` before retrying.
+ * See scripts/smoke-whoop.ts's header for the full rationale (Strava also
+ * rotates the refresh token on successful refresh, so the persist is
+ * required for crash-safety, and failing closed on a 401 would false-
+ * negative a healthy integration whose access token merely expired) — it
+ * applies identically here. The script exists to prove live connectivity
+ * end to end (the stored OAuth token is still usable, refreshing it still
+ * works, and strava/wire.ts's Zod schemas still match Strava's actual
+ * response shape) without touching production business data. For an actual
+ * import, use the webhook route, the cron route, or the Settings screen,
+ * not this script.
  *
  * Exit codes: 0 on success; 1 on any failure — missing env, no profile/no
  * stored tokens, or a live API/parse error — with an actionable message on
  * stderr identifying which.
  */
 
-import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { loadTokens } from "@/lib/integrations/oauth";
@@ -46,10 +53,12 @@ import { getActivity, listActivities, type StravaAuthContext } from "@/lib/integ
 import {
   envErrorMessage,
   errorMessage,
+  isMainModule,
   missingEnvVars,
   requireSoleProfileId,
   smokeSinceDate,
   type EnvLike,
+  type SmokeResult,
 } from "./lib/smoke";
 
 /**
@@ -68,8 +77,6 @@ const REQUIRED_ENV = [
   "STRAVA_CLIENT_ID",
   "STRAVA_CLIENT_SECRET",
 ] as const;
-
-export type SmokeResult = { ok: boolean; message: string };
 
 export type StravaSmokeDeps = {
   admin: SupabaseClient;
@@ -145,23 +152,21 @@ export async function runStravaSmoke(deps: StravaSmokeDeps, env: EnvLike = proce
   }
 }
 
-function productionDeps(): StravaSmokeDeps {
+/**
+ * The CLI entry point's real wiring. Exported (though only `main()` below
+ * calls it at runtime) so tests/unit/smoke-strava.test.ts can structurally
+ * pin that the smoke run funnels through the SHARED fetchers/loadTokens —
+ * see scripts/smoke-whoop.ts's `productionDeps` doc comment for the full
+ * rationale (the "read-only for business data, may rotate tokens" contract
+ * only holds while these stay wired to the shared auto-refresh path).
+ */
+export function productionDeps(): StravaSmokeDeps {
   return {
     admin: getAdminClient(),
     loadTokens,
     listActivities,
     getActivity,
   };
-}
-
-function isMainModule(): boolean {
-  const entry = process.argv[1];
-  if (!entry) return false;
-  try {
-    return fileURLToPath(import.meta.url) === resolve(entry);
-  } catch {
-    return false;
-  }
 }
 
 async function main(): Promise<void> {
@@ -185,7 +190,7 @@ async function main(): Promise<void> {
   process.exit(result.ok ? 0 : 1);
 }
 
-if (isMainModule()) {
+if (isMainModule(import.meta.url)) {
   main().catch((err) => {
     console.error(errorMessage(err));
     process.exit(1);
