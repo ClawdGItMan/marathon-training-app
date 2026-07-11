@@ -65,8 +65,21 @@ const whoopSleepStageSummarySchema = z.object({
   total_rem_sleep_time_milli: z.number(),
 });
 
+// Total sleep need = the sum of all four components. Per
+// developer.whoop.com/docs/developing/user-data/sleep/: "Naps reduce the
+// amount of sleep needed" — need_from_recent_nap_milli carries that
+// reduction (<= 0), so a plain sum is correct.
+const whoopSleepNeededSchema = z.object({
+  baseline_milli: z.number(),
+  need_from_sleep_debt_milli: z.number(),
+  need_from_recent_strain_milli: z.number(),
+  need_from_recent_nap_milli: z.number(),
+});
+
 const whoopSleepScoreSchema = z.object({
   stage_summary: whoopSleepStageSummarySchema,
+  sleep_needed: whoopSleepNeededSchema,
+  respiratory_rate: z.number(),
   sleep_performance_percentage: z.number(),
   sleep_efficiency_percentage: z.number(),
 });

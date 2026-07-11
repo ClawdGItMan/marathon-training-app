@@ -36,8 +36,11 @@ vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: getAdminClientMock }));
 const { localDayOf } = await import("@/lib/sync/timezone");
 const { STALE_RECOVERY_MS, STALE_ACTIVITIES_MS } = await import("@/lib/sync/staleness");
 const { WHOOP_TOKEN_URL } = await import("@/lib/integrations/whoop/client");
-const { syncWhoop } = await import("@/lib/integrations/whoop/sync");
+const { syncWhoop, loadLabelFor, ELEVATED_DAY_STRAIN_THRESHOLD } = await import(
+  "@/lib/integrations/whoop/sync"
+);
 const { saveTokens } = await import("@/lib/integrations/oauth");
+const { rowToRecovery } = await import("@/lib/data/row-mappers");
 
 function testKey(): string {
   return randomBytes(32).toString("base64");
@@ -213,6 +216,15 @@ describe("staleness constants", () => {
   });
 });
 
+describe("loadLabelFor", () => {
+  it("maps day strain to the seed's binary moderate/elevated vocabulary at the documented boundary", () => {
+    expect(loadLabelFor(0)).toBe("moderate");
+    expect(loadLabelFor(ELEVATED_DAY_STRAIN_THRESHOLD - 0.1)).toBe("moderate");
+    expect(loadLabelFor(ELEVATED_DAY_STRAIN_THRESHOLD)).toBe("elevated");
+    expect(loadLabelFor(21)).toBe("elevated");
+  });
+});
+
 describe("syncWhoop", () => {
   const userId = "user-42";
 
@@ -253,14 +265,32 @@ describe("syncWhoop", () => {
     expect(snapshot.rhr).toBe(48);
     expect(snapshot.day_strain).toBe(14.2);
 
+    // Sleep jsonb must be the exact shape row-mappers.ts's recoveryRowSchema
+    // reads (minutes, respRate folded in — the write side conforms to the
+    // read contract). Fixture: deep 5,400,000ms / rem 8,520,000ms /
+    // light 12,600,000ms -> 90/142/210 min; need = baseline 28,800,000
+    // + strain 600,000 = 29,400,000ms -> 490 min.
     const sleep = snapshot.sleep as Record<string, number>;
-    expect(sleep.efficiencyPct).toBe(88);
-    expect(sleep.sleepScorePct).toBe(78);
+    expect(sleep).toEqual({
+      respRate: 15.2,
+      durationMin: 90 + 142 + 210,
+      needMin: 490,
+      efficiencyPct: 88,
+      sleepScorePct: 78,
+      deepMin: 90,
+      remMin: 142,
+      lightMin: 210,
+    });
     expect(sleep.efficiencyPct).not.toBe(sleep.sleepScorePct);
-    expect(sleep.deepSec).toBe(5400);
-    expect(sleep.remSec).toBe(8520);
-    expect(sleep.lightSec).toBe(12600);
-    expect(sleep.durationSec).toBe(5400 + 8520 + 12600);
+
+    // No previous-day row exists, so deltas are 0 (payload schema forces
+    // numbers); day_strain 14.2 >= the elevated threshold.
+    expect(snapshot.payload).toEqual({
+      recoveryDelta: 0,
+      hrvDeltaPct: 0,
+      rhrDelta: 0,
+      loadLabel: "elevated",
+    });
 
     expect(tables.activities.rows()).toHaveLength(1);
     const activity = tables.activities.rows()[0];
@@ -406,6 +436,133 @@ describe("syncWhoop", () => {
     // Page 1 was empty; page 2's single scored record was still synced —
     // proving both pages' records were aggregated, not just the first page.
     expect(tables.recovery_snapshots.rows()).toHaveLength(1);
+  });
+
+  it("round-trip guard: the row syncWhoop upserts parses through rowToRecovery (the app's read path)", async () => {
+    const { client: admin, tables } = createFakeAdmin();
+    getAdminClientMock.mockReturnValue(admin);
+    await seedConnectedUser(tables, userId);
+    installWhoopFetchMock({
+      recovery: recoveryFixture,
+      sleep: sleepFixture,
+      cycle: cycleFixture,
+      workout: workoutFixture,
+    });
+
+    await syncWhoop(admin, userId, {});
+
+    // This is the write-read compatibility pin: rowToRecovery throws (Zod)
+    // on any row that doesn't satisfy the read contract every screen uses.
+    const domain = rowToRecovery(tables.recovery_snapshots.rows()[0]);
+
+    expect(domain.date).toBe("2026-07-09");
+    expect(domain.recoveryPct).toBe(67);
+    expect(domain.hrv).toBe(54.3);
+    expect(domain.rhr).toBe(48);
+    expect(domain.respRate).toBe(15.2);
+    expect(domain.load).toBe(14.2);
+    expect(domain.loadLabel).toBe("elevated");
+    expect(domain.sleep.efficiencyPct).toBe(88);
+    expect(domain.sleep.sleepScorePct).toBe(78);
+  });
+
+  it("computes payload deltas against the stored previous-day row, and recomputes them identically on re-sync", async () => {
+    const { client: admin, tables } = createFakeAdmin();
+    getAdminClientMock.mockReturnValue(admin);
+    await seedConnectedUser(tables, userId);
+    // Yesterday's stored snapshot (what a prior sync run would have written).
+    tables.recovery_snapshots.seed({
+      user_id: userId,
+      day: "2026-07-08",
+      recovery_pct: 60,
+      hrv_ms: 50,
+      rhr: 50,
+      day_strain: 10.1,
+      sleep: {},
+      payload: { recoveryDelta: 0, hrvDeltaPct: 0, rhrDelta: 0, loadLabel: "moderate" },
+    });
+    installWhoopFetchMock({
+      recovery: recoveryFixture,
+      sleep: sleepFixture,
+      cycle: cycleFixture,
+      workout: workoutFixture,
+    });
+
+    await syncWhoop(admin, userId, {});
+
+    const today = () => tables.recovery_snapshots.rows().find((r) => r.day === "2026-07-09")!;
+    // recovery 67 vs 60 -> +7; hrv 54.3 vs 50 -> +8.6% -> 9; rhr 48 vs 50 -> -2.
+    const expected = { recoveryDelta: 7, hrvDeltaPct: 9, rhrDelta: -2, loadLabel: "elevated" };
+    expect(today().payload).toEqual(expected);
+
+    // Idempotency of the payload itself: re-running reads the same stored
+    // previous-day row (not in-memory state) and recomputes the same values.
+    installWhoopFetchMock({
+      recovery: recoveryFixture,
+      sleep: sleepFixture,
+      cycle: cycleFixture,
+      workout: workoutFixture,
+    });
+    await syncWhoop(admin, userId, {});
+    expect(today().payload).toEqual(expected);
+    expect(tables.recovery_snapshots.rows()).toHaveLength(2); // yesterday + today, no dupes
+  });
+
+  it("a multi-day sync processes days in ascending order so day 2's deltas come from day 1 written in the same run", async () => {
+    const { client: admin, tables } = createFakeAdmin();
+    getAdminClientMock.mockReturnValue(admin);
+    await seedConnectedUser(tables, userId);
+
+    // Build a second day from the canonical fixtures (2026-07-10, lower
+    // strain), and serve the records deliberately NEWEST-FIRST — Whoop
+    // returns collections in descending order, so ascending-day processing
+    // must come from sync's own sorting, not response order.
+    const rec1 = recoveryFixture.records[0];
+    const recovery2 = {
+      ...rec1,
+      cycle_id: 93846,
+      sleep_id: "bf6ff8d4-3333-4c9c-a361-2e5d6b3dcc9d",
+      score: { ...rec1.score, recovery_score: 75, resting_heart_rate: 47, hrv_rmssd_milli: 60 },
+    };
+    const sleep2 = {
+      ...sleepFixture.records[0],
+      id: "bf6ff8d4-3333-4c9c-a361-2e5d6b3dcc9d",
+      cycle_id: 93846,
+    };
+    const cycle2 = {
+      ...cycleFixture.records[0],
+      id: 93846,
+      start: "2026-07-09T10:58:00.000Z",
+      end: "2026-07-10T10:58:00.000Z",
+      score: { ...cycleFixture.records[0].score, strain: 9.5 },
+    };
+    installWhoopFetchMock({
+      recovery: { records: [recovery2, rec1], next_token: null },
+      sleep: { records: [sleep2, ...sleepFixture.records], next_token: null },
+      cycle: { records: [cycle2, ...cycleFixture.records], next_token: null },
+      workout: { records: [], next_token: null },
+    });
+
+    const result = await syncWhoop(admin, userId, {});
+    expect(result.ok).toBe(true);
+
+    const byDay = (day: string) => tables.recovery_snapshots.rows().find((r) => r.day === day)!;
+    // Day 1 has no predecessor -> zero deltas, strain 14.2 -> elevated.
+    expect(byDay("2026-07-09").payload).toEqual({
+      recoveryDelta: 0,
+      hrvDeltaPct: 0,
+      rhrDelta: 0,
+      loadLabel: "elevated",
+    });
+    // Day 2's deltas come from day 1's just-written row: recovery 75 vs 67
+    // -> +8; hrv 60 vs 54.3 -> +10.5% -> 10 (rounded); rhr 47 vs 48 -> -1;
+    // strain 9.5 < threshold -> moderate.
+    expect(byDay("2026-07-10").payload).toEqual({
+      recoveryDelta: 8,
+      hrvDeltaPct: 10,
+      rhrDelta: -1,
+      loadLabel: "moderate",
+    });
   });
 
   it("saveTokens/loadTokens round-trip works against the fake admin (sanity check for the test harness itself)", async () => {
