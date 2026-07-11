@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getBrowserClient } from "@/lib/supabase/browser";
+import { markFallback } from "@/lib/data/offline-cache";
 import { seed } from "@/lib/data/seed";
 import { chatMessageSchema, sessionSchema } from "@/lib/domain/schemas";
 import {
@@ -97,6 +98,16 @@ async function getBlock(): Promise<TrainingBlock> {
   return rowToBlock(data);
 }
 
+// Task 9: pre-first-sync fallback. Before Whoop has ever synced for this
+// user, `recovery_snapshots` has zero rows — reading it "live and empty"
+// would leave the app rendering nothing (Recovery ring, 7-day chart) until
+// the first cron/on-open sync lands. Mirrors local-repo.ts's own
+// seed-derived getLatestRecovery/getRecovery7d exactly (`seed.recovery.at(-1)`
+// / `seed.recovery.slice(-7)`) so the fallback values are the identical
+// seed data Phase 1 already ships, not a second seed source to keep in
+// sync. `markFallback` (src/lib/data/offline-cache.ts) flags this in
+// staleInfo for whichever caller wraps this repo in `withOfflineCache` —
+// harmless no-op if called unwrapped (e.g. the parity suite).
 async function getRecovery7d(): Promise<RecoverySnapshot[]> {
   // Order descending + limit 7 to get the most recent 7 rows (not the
   // oldest 7 — matters once more than 7 rows exist, e.g. after Phase-3
@@ -108,6 +119,10 @@ async function getRecovery7d(): Promise<RecoverySnapshot[]> {
     .order("day", { ascending: false })
     .limit(7);
   if (error) throw error;
+  if (data.length === 0) {
+    markFallback("getRecovery7d");
+    return seed.recovery.slice(-7);
+  }
   return data.map(rowToRecovery).reverse();
 }
 
@@ -117,8 +132,14 @@ async function getLatestRecovery(): Promise<RecoverySnapshot> {
     .select("*")
     .order("day", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
   if (error) throw error;
+  if (!data) {
+    markFallback("getLatestRecovery");
+    const latest = seed.recovery.at(-1);
+    if (!latest) throw new Error("No recovery data available");
+    return latest;
+  }
   return rowToRecovery(data);
 }
 

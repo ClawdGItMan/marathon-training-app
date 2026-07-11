@@ -72,7 +72,11 @@ export function isNetworkError(err: unknown): boolean {
   return /failed to fetch|fetch failed|load failed|network|ECONNREFUSED|ETIMEDOUT|abort/i.test(errorMessage(err));
 }
 
-export type StaleEntry = { servedFromCache: boolean; cachedAt: string | null };
+// `fallback` (Task 9) is additive and OMITTED (not `false`) on every normal
+// entry — keeps the Task-5 shape backward compatible for existing
+// `toEqual({ servedFromCache, cachedAt })` assertions, which would fail
+// against an explicit `fallback: false` key that wasn't there before.
+export type StaleEntry = { servedFromCache: boolean; cachedAt: string | null; fallback?: boolean };
 export type StaleInfo = Record<string, StaleEntry>;
 
 // Module-level so Task 12's markers can read it after any screen's fetch.
@@ -83,9 +87,27 @@ export function getStaleInfo(): StaleInfo {
 /** Test-only: reset module state between unit tests. */
 export function __resetStaleInfoForTests(): void {
   staleInfo = {};
+  fallbackFlags.clear();
 }
-function setStale(method: string, servedFromCache: boolean, cachedAt: string | null): void {
-  staleInfo = { ...staleInfo, [method]: { servedFromCache, cachedAt } };
+function setStale(method: string, servedFromCache: boolean, cachedAt: string | null, fallback?: boolean): void {
+  staleInfo = {
+    ...staleInfo,
+    [method]: fallback ? { servedFromCache, cachedAt, fallback: true } : { servedFromCache, cachedAt },
+  };
+}
+
+// ---- pre-first-sync fallback marker (Task 9) --------------------------------
+// supabaseRepo's getLatestRecovery/getRecovery7d fall back to seed values
+// when `recovery_snapshots` has no rows yet for the user (so the app is
+// never empty pre-first-sync — see supabase-repo.ts). Those methods call
+// `markFallback(method)` DURING their live() call to flag "this value is a
+// seed fallback, not real synced data"; `read()` below folds that into the
+// method's staleInfo entry once live() resolves, then clears the flag
+// (`finally`) so it never leaks into an unrelated later call for the same
+// method name.
+const fallbackFlags = new Set<string>();
+export function markFallback(method: string): void {
+  fallbackFlags.add(method);
 }
 
 type Envelope<T> = { value: T; cachedAt: string };
@@ -116,10 +138,11 @@ function writeCache<T>(key: string, value: T): void {
  * masking it behind stale cached data.
  */
 async function read<T>(method: string, key: string, schema: z.ZodType<T>, live: () => Promise<T>): Promise<T> {
+  fallbackFlags.delete(method); // discard any stale flag left by an unrelated earlier call
   try {
     const value = await live();
     writeCache(key, value);
-    setStale(method, false, new Date().toISOString());
+    setStale(method, false, new Date().toISOString(), fallbackFlags.has(method));
     return value;
   } catch (err) {
     if (!isNetworkError(err)) throw err;
@@ -127,6 +150,8 @@ async function read<T>(method: string, key: string, schema: z.ZodType<T>, live: 
     if (!cached) throw new OfflineError(`${method}: network failure and no usable cached value`, { cause: err });
     setStale(method, true, cached.cachedAt);
     return cached.value;
+  } finally {
+    fallbackFlags.delete(method);
   }
 }
 
