@@ -272,11 +272,21 @@ async function logPain(areaId: string, severity: number, note?: string): Promise
 // exist, with the same pre-first-import seed fallback as
 // getLatestRecovery/getRecovery7d (markFallback + "zero rows -> seed").
 
-/** Most recent imported activity for Log's AUTO-IMPORTED · STRAVA card. */
+/**
+ * Most recent imported activity for Log's AUTO-IMPORTED · STRAVA card.
+ * Strava-sourced rows ONLY (I3): a Whoop-only workout (strength session,
+ * unmatched run — no strava_id) must never be presented as a Strava import,
+ * so a whoop-only row being newest is skipped in favor of the newest row
+ * that actually has a strava_id. Note the seeded demo activities carry no
+ * strava_id either (their Strava identity predates Phase 2), so a freshly
+ * seeded DB takes the zero-rows seed-fallback path below — which serves the
+ * same seed values those rows were generated from.
+ */
 async function getLatestActivity(): Promise<Activity | null> {
   const { data, error } = await getBrowserClient()
     .from("activities")
     .select("*")
+    .not("strava_id", "is", null)
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();

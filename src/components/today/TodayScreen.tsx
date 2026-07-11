@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { repo } from "@/lib/data";
+import { resolveTodaySessionId } from "@/lib/data/today";
 import type { ProposalDecision } from "@/lib/data/repo";
 import type {
   PlannedSession,
@@ -39,7 +40,14 @@ async function loadTodayState(): Promise<TodayState> {
     repo.getPredictions(),
   ]);
 
-  const todaySession = week.find((s) => s.date === recovery.date) ?? week[0];
+  // I2: resolve today BY DATE (home tz) with the static seed id as fallback
+  // (src/lib/data/today.ts) instead of deriving it from recovery.date —
+  // pre-first-sync, recovery.date is the seed's last demo day, which
+  // post-reanchor matches nothing and used to mis-select week[0]. Local
+  // mode is unchanged: no live date matches the frozen demo week, and the
+  // fallback (wed-400s) is exactly what recovery.date used to select.
+  const todayId = resolveTodaySessionId(week, new Date());
+  const todaySession = week.find((s) => s.id === todayId) ?? week[0];
   const dayProposal = proposals.find(
     (p) => p.scope === "day" && p.targetSessionId === todaySession.id
   );

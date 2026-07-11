@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { repo } from "@/lib/data";
-import { seed } from "@/lib/data/seed";
+import { resolveTodaySessionId } from "@/lib/data/today";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { ImportedRunSection } from "@/components/log/ImportedRunSection";
 import { RpeSection } from "@/components/log/RpeSection";
@@ -18,11 +18,18 @@ type LogState = {
 };
 
 async function loadLogState(): Promise<LogState> {
-  const [session, pains, activity] = await Promise.all([
-    repo.getSession(seed.todaySessionId),
+  const [week, pains, activity] = await Promise.all([
+    repo.getWeekSessions(),
     repo.getPains(),
     repo.getLatestActivity(),
   ]);
+  // I2: today's session resolves BY DATE (home tz) with the static seed id
+  // as fallback (see src/lib/data/today.ts). A fallback id not present in
+  // the week list under its own id (a moved session renamed by an accepted
+  // proposal) still resolves through getSession's dual-id lookup, exactly
+  // as the previous getSession(seed.todaySessionId) call did.
+  const todayId = resolveTodaySessionId(week, new Date());
+  const session = week.find((s) => s.id === todayId) ?? (await repo.getSession(todayId));
   return { session, pains, activity };
 }
 

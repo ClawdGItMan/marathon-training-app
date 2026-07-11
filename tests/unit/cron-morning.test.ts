@@ -58,12 +58,19 @@ type Row = Record<string, unknown>;
  * call) resolves too, matching real supabase-js's thenable FilterBuilder. */
 function makeQueryBuilder(rows: Row[]) {
   const filters: Array<[string, unknown]> = [];
+  // I3 harness extension: `.not(col, "is", null)` (getLatestActivity's
+  // strava-sourced filter). A key absent from a fake row is a NULL column
+  // on real Postgres, so undefined is excluded too.
+  const notNullCols: string[] = [];
   let orderCol: string | undefined;
   let orderAsc = true;
   let limitN: number | undefined;
 
   function computeRows(): Row[] {
-    let result = rows.filter((r) => filters.every(([c, v]) => r[c] === v));
+    let result = rows.filter(
+      (r) =>
+        filters.every(([c, v]) => r[c] === v) && notNullCols.every((c) => (r[c] ?? null) !== null)
+    );
     if (orderCol) {
       const col = orderCol;
       result = [...result].sort((a, b) => {
@@ -84,6 +91,11 @@ function makeQueryBuilder(rows: Row[]) {
     },
     eq(col: string, val: unknown) {
       filters.push([col, val]);
+      return builder;
+    },
+    not(col: string, _op: "is", val: unknown) {
+      void _op;
+      if (val === null) notNullCols.push(col);
       return builder;
     },
     order(col: string, opts?: { ascending?: boolean }) {
@@ -455,8 +467,11 @@ describe("supabaseRepo activity/mileage fallback (pre-first-import, Task 11)", (
   });
 
   it("getLatestActivity returns the real row (mapped via rowToActivity) when one exists", async () => {
+    // strava_id present: as of I3 the card reads STRAVA-SOURCED rows only —
+    // a whoop-only row here would (correctly) fall back to seed instead.
     const row = {
       id: "activity-1",
+      strava_id: 987654321,
       started_at: "2026-07-09T13:02:00.000Z",
       distance_m: 8046.72, // 5.0mi
       moving_sec: 1800,

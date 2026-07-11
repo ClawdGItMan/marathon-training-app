@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { repo } from "@/lib/data";
 import type { StrengthSession } from "@/lib/data/repo";
 import { seed } from "@/lib/data/seed";
+import { resolveTodaySessionId } from "@/lib/data/today";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { UnderlineTabs } from "@/components/ui/UnderlineTabs";
 import { RunTab } from "@/components/plan/RunTab";
@@ -65,7 +66,10 @@ export function PlanScreen() {
           block={block}
           periodization={seed.periodization}
           week={week}
-          todaySessionId={seed.todaySessionId}
+          // I2: the lime row is strictly "now" — resolve today by date (home
+          // tz), falling back to the static seed id in local mode's frozen
+          // demo week (see src/lib/data/today.ts).
+          todaySessionId={resolveTodaySessionId(week, new Date())}
         />
       ) : (
         <StrengthTab strength={strength} />
