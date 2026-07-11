@@ -168,3 +168,20 @@ export async function loadTokens(
     athleteRef: row.athlete_ref,
   };
 }
+
+/**
+ * Deletes `userId`'s stored tokens for `provider` (Settings' DISCONNECT
+ * action — Tasks 7/10's connect routes). Idempotent: deleting a row that
+ * doesn't exist is not an error.
+ */
+export async function deleteTokens(userId: string, provider: Provider): Promise<void> {
+  const parsedProvider = providerSchema.parse(provider);
+
+  const { error } = await getAdminClient()
+    .from("integration_tokens")
+    .delete()
+    .eq("user_id", userId)
+    .eq("provider", parsedProvider);
+
+  if (error) throw error;
+}

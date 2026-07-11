@@ -26,7 +26,7 @@ const { cookiesMock, getAdminClientMock } = vi.hoisted(() => ({
 vi.mock("next/headers", () => ({ cookies: cookiesMock }));
 vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: getAdminClientMock }));
 
-const { assertState, loadTokens, makeState, OAUTH_STATE_COOKIE, saveTokens } = await import(
+const { assertState, deleteTokens, loadTokens, makeState, OAUTH_STATE_COOKIE, saveTokens } = await import(
   "@/lib/integrations/oauth"
 );
 
@@ -208,5 +208,39 @@ describe("saveTokens / loadTokens", () => {
     getAdminClientMock.mockReturnValue(admin);
 
     expect(await loadTokens("user-123", "whoop")).toBeNull();
+  });
+});
+
+describe("deleteTokens", () => {
+  /** Fluent mock for the delete().eq().eq() chain deleteTokens uses. */
+  function makeDeleteAdminClientMock(result: { error: unknown } = { error: null }) {
+    const eq2 = vi.fn().mockResolvedValue(result);
+    const eq1 = vi.fn(() => ({ eq: eq2 }));
+    const del = vi.fn(() => ({ eq: eq1 }));
+    const from = vi.fn(() => ({ delete: del }));
+    return { from, delete: del, eq1, eq2 };
+  }
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("deletes the row scoped to the passed-in userId and provider", async () => {
+    const admin = makeDeleteAdminClientMock();
+    getAdminClientMock.mockReturnValue(admin);
+
+    await deleteTokens("user-123", "whoop");
+
+    expect(admin.from).toHaveBeenCalledWith("integration_tokens");
+    expect(admin.delete).toHaveBeenCalledTimes(1);
+    expect(admin.eq1).toHaveBeenCalledWith("user_id", "user-123");
+    expect(admin.eq2).toHaveBeenCalledWith("provider", "whoop");
+  });
+
+  it("throws when the delete errors", async () => {
+    const admin = makeDeleteAdminClientMock({ error: { message: "boom" } });
+    getAdminClientMock.mockReturnValue(admin);
+
+    await expect(deleteTokens("user-123", "strava")).rejects.toBeTruthy();
   });
 });
