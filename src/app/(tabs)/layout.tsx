@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { refreshIfStale } from "@/lib/sync/run";
+import { registerServiceWorker } from "@/lib/sw/register";
 
 /**
  * On-open staleness refresh (Task 9). Fires `refreshIfStale` once per app
@@ -21,6 +22,14 @@ export default function TabsLayout({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_REPO_MODE !== "supabase") return;
     void refreshIfStale();
+  }, []);
+
+  // I6: app-shell service worker, BOTH repo modes (the SW caches the shell,
+  // not data). Deliberately a separate effect from the mode-gated refresh
+  // above; the registration helper itself is production-gated and
+  // never throws (see src/lib/sw/register.ts).
+  useEffect(() => {
+    registerServiceWorker();
   }, []);
 
   return <AppShell>{children}</AppShell>;

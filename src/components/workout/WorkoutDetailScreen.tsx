@@ -8,6 +8,7 @@ import { WorkoutHeader } from "@/components/workout/WorkoutHeader";
 import { WorkoutHero } from "@/components/workout/WorkoutHero";
 import { BreakdownList } from "@/components/workout/BreakdownList";
 import { CoachSuggestBox } from "@/components/workout/CoachSuggestBox";
+import { WriteErrorLine } from "@/components/ui/WriteErrorLine";
 import { formatDayContext, formatWeekOf } from "@/lib/format";
 
 type WorkoutState = {
@@ -33,6 +34,11 @@ async function loadWorkoutState(id: string): Promise<WorkoutState> {
  */
 export function WorkoutDetailScreen({ sessionId, from }: { sessionId: string; from?: string }) {
   const [state, setState] = useState<WorkoutState | null>(null);
+  // I4: one error state per write control, each rendered adjacent to its
+  // trigger (decide -> under COACH SUGGESTS; start -> under START WORKOUT);
+  // success on retry clears the corresponding line.
+  const [decideError, setDecideError] = useState<unknown>(null);
+  const [startError, setStartError] = useState<unknown>(null);
 
   const refresh = useCallback(async () => {
     const next = await loadWorkoutState(sessionId);
@@ -51,15 +57,25 @@ export function WorkoutDetailScreen({ sessionId, from }: { sessionId: string; fr
 
   const handleDecide = useCallback(
     async (proposalId: string, decision: ProposalDecision) => {
-      await repo.decideProposal(proposalId, decision);
-      await refresh();
+      try {
+        await repo.decideProposal(proposalId, decision);
+        await refresh();
+        setDecideError(null);
+      } catch (err) {
+        setDecideError(err);
+      }
     },
     [refresh]
   );
 
   const handleStart = useCallback(async () => {
-    await repo.startSession(sessionId);
-    await refresh();
+    try {
+      await repo.startSession(sessionId);
+      await refresh();
+      setStartError(null);
+    } catch (err) {
+      setStartError(err);
+    }
   }, [refresh, sessionId]);
 
   if (!state) return null;
@@ -74,10 +90,15 @@ export function WorkoutDetailScreen({ sessionId, from }: { sessionId: string; fr
       {session.structure ? <BreakdownList structure={session.structure} /> : null}
 
       {proposal ? (
-        <CoachSuggestBox
-          proposal={proposal}
-          onDecide={(decision) => handleDecide(proposal.id, decision)}
-        />
+        <>
+          <CoachSuggestBox
+            proposal={proposal}
+            onDecide={(decision) => handleDecide(proposal.id, decision)}
+          />
+          <div className="px-[22px]">
+            <WriteErrorLine error={decideError} />
+          </div>
+        </>
       ) : null}
 
       <div className="px-[22px] pb-1 pt-[18px]">
@@ -87,6 +108,7 @@ export function WorkoutDetailScreen({ sessionId, from }: { sessionId: string; fr
         >
           START WORKOUT
         </button>
+        <WriteErrorLine error={startError} />
       </div>
     </div>
   );

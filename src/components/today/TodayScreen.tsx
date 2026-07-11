@@ -15,6 +15,7 @@ import type {
 } from "@/lib/domain/types";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Section } from "@/components/ui/Section";
+import { WriteErrorLine } from "@/components/ui/WriteErrorLine";
 import { GlanceLines } from "@/components/today/GlanceLines";
 import { ReadinessHero } from "@/components/today/ReadinessHero";
 import { RecommendationBox } from "@/components/today/RecommendationBox";
@@ -58,6 +59,7 @@ async function loadTodayState(): Promise<TodayState> {
 
 export function TodayScreen() {
   const [state, setState] = useState<TodayState | null>(null);
+  const [writeError, setWriteError] = useState<unknown>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,11 +73,19 @@ export function TodayScreen() {
     };
   }, []);
 
+  // I4: a rejected decide renders one calm inline line under the
+  // recommendation box (which stays visible — the proposal is undecided)
+  // instead of an unhandled rejection; a retry that succeeds clears it.
   const handleDecide = useCallback(
     async (proposalId: string, decision: ProposalDecision, edited?: PlannedSession) => {
-      await repo.decideProposal(proposalId, decision, edited);
-      const next = await loadTodayState();
-      setState(next);
+      try {
+        await repo.decideProposal(proposalId, decision, edited);
+        const next = await loadTodayState();
+        setState(next);
+        setWriteError(null);
+      } catch (err) {
+        setWriteError(err);
+      }
     },
     []
   );
@@ -105,10 +115,15 @@ export function TodayScreen() {
       </div>
 
       {dayProposal ? (
-        <RecommendationBox
-          proposal={dayProposal}
-          onDecide={(decision, edited) => handleDecide(dayProposal.id, decision, edited)}
-        />
+        <>
+          <RecommendationBox
+            proposal={dayProposal}
+            onDecide={(decision, edited) => handleDecide(dayProposal.id, decision, edited)}
+          />
+          <div className="px-[22px]">
+            <WriteErrorLine error={writeError} />
+          </div>
+        </>
       ) : null}
 
       <div className="px-[22px] pt-[18px]">

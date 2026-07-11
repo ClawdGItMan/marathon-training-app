@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { WorkoutDetailScreen } from "@/components/workout/WorkoutDetailScreen";
 import { localRepo } from "@/lib/data/local-repo";
+import { OfflineError } from "@/lib/data/offline-cache";
 import { categoryLabel, groupBreakdown } from "@/lib/workout";
 import type { StructureSegment } from "@/lib/domain/types";
 
@@ -96,4 +97,40 @@ test("START WORKOUT marks the session in-progress", async () => {
     const s = await localRepo.getSession("wed-400s");
     expect(s.status).toBe("in-progress");
   });
+});
+
+test("I4: a rejected START WORKOUT shows OFFLINE — TRY AGAIN; retry success clears it", async () => {
+  const spy = vi
+    .spyOn(localRepo, "startSession")
+    .mockRejectedValueOnce(new OfflineError("startSession: write failed"));
+
+  render(<WorkoutDetailScreen sessionId="wed-400s" />);
+  fireEvent.click(await screen.findByRole("button", { name: "START WORKOUT" }));
+
+  expect(await screen.findByText("OFFLINE — TRY AGAIN")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "START WORKOUT" }));
+  await waitFor(() => expect(screen.queryByText("OFFLINE — TRY AGAIN")).not.toBeInTheDocument());
+  const s = await localRepo.getSession("wed-400s");
+  expect(s.status).toBe("in-progress");
+
+  spy.mockRestore();
+});
+
+test("I4: a rejected decide shows the error line next to COACH SUGGESTS; retry success clears it", async () => {
+  const spy = vi
+    .spyOn(localRepo, "decideProposal")
+    .mockRejectedValueOnce(new Error("boom"));
+
+  render(<WorkoutDetailScreen sessionId="wed-400s" />);
+  fireEvent.click(await screen.findByRole("button", { name: "ACCEPT" }));
+
+  expect(await screen.findByText("COULDN'T SAVE — TRY AGAIN")).toBeInTheDocument();
+  expect(screen.getByText("COACH SUGGESTS")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "ACCEPT" }));
+  await waitFor(() => expect(screen.queryByText("COACH SUGGESTS")).not.toBeInTheDocument());
+  expect(screen.queryByText("COULDN'T SAVE — TRY AGAIN")).not.toBeInTheDocument();
+
+  spy.mockRestore();
 });

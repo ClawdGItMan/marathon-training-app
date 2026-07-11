@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { TodayScreen } from "@/components/today/TodayScreen";
+import { localRepo } from "@/lib/data/local-repo";
+import { OfflineError } from "@/lib/data/offline-cache";
 
 // Task 12: see body.test.tsx's identical setup comment — default delegates
 // to the real (local-mode, no Supabase) getSyncStatus so every existing
@@ -90,6 +92,25 @@ test("MODIFY opens the sheet and saving applies the edit", async () => {
 
   expect(await screen.findByText("Easy shakeout")).toBeInTheDocument();
   expect(screen.queryByText("PROPOSED")).not.toBeInTheDocument();
+});
+
+test("I4: a rejected decide shows OFFLINE — TRY AGAIN next to the recommendation; retry success clears it", async () => {
+  const spy = vi
+    .spyOn(localRepo, "decideProposal")
+    .mockRejectedValueOnce(new OfflineError("decideProposal: write failed"));
+
+  render(<TodayScreen />);
+  fireEvent.click(await screen.findByRole("button", { name: "ACCEPT" }));
+
+  expect(await screen.findByText("OFFLINE — TRY AGAIN")).toBeInTheDocument();
+  // The proposal was NOT decided — its box is still there for the retry.
+  expect(screen.getByText("PROPOSED")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "ACCEPT" }));
+  await waitFor(() => expect(screen.queryByText("PROPOSED")).not.toBeInTheDocument());
+  expect(screen.queryByText("OFFLINE — TRY AGAIN")).not.toBeInTheDocument();
+
+  spy.mockRestore();
 });
 
 test("OVERRIDE keeps the original 400s unstruck", async () => {

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { LogScreen } from "@/components/log/LogScreen";
 import { localRepo } from "@/lib/data/local-repo";
+import { OfflineError } from "@/lib/data/offline-cache";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -125,6 +126,38 @@ test("SAVE LOG with NONE selected omits pain fields but still logs the run", asy
   // no pain override was written for this save.
   const pains = await localRepo.getPains();
   expect(pains.find((p) => p.id === "achilles-l")!.severity).toBe(2);
+});
+
+test("I4: SAVE LOG rejection shows OFFLINE — TRY AGAIN, does not navigate; retry success clears it", async () => {
+  const spy = vi
+    .spyOn(localRepo, "logRun")
+    .mockRejectedValueOnce(new OfflineError("logRun: write failed"));
+
+  render(<LogScreen />);
+  fireEvent.click(await screen.findByRole("button", { name: "SAVE LOG" }));
+
+  expect(await screen.findByText("OFFLINE — TRY AGAIN")).toBeInTheDocument();
+  expect(push).not.toHaveBeenCalled();
+
+  // Retry: the once-rejection is consumed, the spy calls through to the
+  // real localRepo.logRun — success must clear the line and navigate.
+  fireEvent.click(screen.getByRole("button", { name: "SAVE LOG" }));
+  await waitFor(() => expect(push).toHaveBeenCalledWith("/today"));
+  expect(screen.queryByText("OFFLINE — TRY AGAIN")).not.toBeInTheDocument();
+
+  spy.mockRestore();
+});
+
+test("I4: a non-network write rejection shows COULDN'T SAVE — TRY AGAIN", async () => {
+  const spy = vi.spyOn(localRepo, "logRun").mockRejectedValueOnce(new Error("boom"));
+
+  render(<LogScreen />);
+  fireEvent.click(await screen.findByRole("button", { name: "SAVE LOG" }));
+
+  expect(await screen.findByText("COULDN'T SAVE — TRY AGAIN")).toBeInTheDocument();
+  expect(push).not.toHaveBeenCalled();
+
+  spy.mockRestore();
 });
 
 test("?focus=pain scrolls the pain section into view", async () => {

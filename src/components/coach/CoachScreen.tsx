@@ -7,6 +7,7 @@ import type { ChatMessage, Proposal, RecoverySnapshot, TrainingBlock } from "@/l
 import { CoachHeader } from "@/components/coach/CoachHeader";
 import { Transcript } from "@/components/coach/Transcript";
 import { Composer } from "@/components/coach/Composer";
+import { WriteErrorLine } from "@/components/ui/WriteErrorLine";
 import { chatTime, OFFLINE_REPLY, resolveCoachOrigin } from "@/lib/coach";
 import { formatDayContext, formatWeekOf } from "@/lib/format";
 
@@ -37,6 +38,11 @@ async function loadCoachState(): Promise<CoachState> {
 export function CoachScreen({ from }: { from?: string }) {
   const [state, setState] = useState<CoachState | null>(null);
   const [draft, setDraft] = useState("");
+  // I4: one calm inline line for this screen's two write controls (proposal
+  // decides at the transcript's foot, sends from the composer) — both sit
+  // directly around the line's slot between Transcript and Composer, so a
+  // single state serves both without a second pattern. Retry success clears.
+  const [writeError, setWriteError] = useState<unknown>(null);
 
   const refresh = useCallback(async () => {
     setState(await loadCoachState());
@@ -54,8 +60,13 @@ export function CoachScreen({ from }: { from?: string }) {
 
   const handleDecide = useCallback(
     async (proposalId: string, decision: ProposalDecision) => {
-      await repo.decideProposal(proposalId, decision);
-      await refresh();
+      try {
+        await repo.decideProposal(proposalId, decision);
+        await refresh();
+        setWriteError(null);
+      } catch (err) {
+        setWriteError(err);
+      }
     },
     [refresh]
   );
@@ -64,14 +75,19 @@ export function CoachScreen({ from }: { from?: string }) {
     async (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
-      await repo.appendChat({ id: crypto.randomUUID(), role: "user", text: trimmed });
-      await repo.appendChat({
-        id: crypto.randomUUID(),
-        role: "coach",
-        text: OFFLINE_REPLY,
-        time: chatTime(),
-      });
-      await refresh();
+      try {
+        await repo.appendChat({ id: crypto.randomUUID(), role: "user", text: trimmed });
+        await repo.appendChat({
+          id: crypto.randomUUID(),
+          role: "coach",
+          text: OFFLINE_REPLY,
+          time: chatTime(),
+        });
+        await refresh();
+        setWriteError(null);
+      } catch (err) {
+        setWriteError(err);
+      }
     },
     [refresh]
   );
@@ -99,6 +115,10 @@ export function CoachScreen({ from }: { from?: string }) {
         openProposals={openProposals}
         onDecide={handleDecide}
       />
+
+      <div className="px-[22px]">
+        <WriteErrorLine error={writeError} />
+      </div>
 
       <Composer value={draft} onChange={setDraft} onSend={handleSend} onPrompt={handlePrompt} />
     </div>

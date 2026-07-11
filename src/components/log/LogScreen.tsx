@@ -6,6 +6,7 @@ import { repo } from "@/lib/data";
 import { resolveTodaySessionId } from "@/lib/data/today";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { ImportedRunSection } from "@/components/log/ImportedRunSection";
+import { WriteErrorLine } from "@/components/ui/WriteErrorLine";
 import { RpeSection } from "@/components/log/RpeSection";
 import { PainSection } from "@/components/log/PainSection";
 import { formatDayContext } from "@/lib/format";
@@ -52,6 +53,7 @@ export function LogScreen({ focusPain = false }: { focusPain?: boolean }) {
   const [rpe, setRpe] = useState(DEFAULT_RPE);
   const [selectedPain, setSelectedPain] = useState<string | null>(null);
   const [severity, setSeverity] = useState(0);
+  const [writeError, setWriteError] = useState<unknown>(null);
   const painSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -80,15 +82,23 @@ export function LogScreen({ focusPain = false }: { focusPain?: boolean }) {
     }
   }, [focusPain, state]);
 
+  // I4: a rejected write renders one calm inline line (WriteErrorLine)
+  // instead of an unhandled rejection + silently dead button; a retry that
+  // succeeds clears it (and navigates, so the cleared line is moot anyway).
   const handleSave = useCallback(async () => {
     if (!state) return;
-    await repo.logRun({
-      sessionId: state.session.id,
-      rpe,
-      painAreaId: selectedPain ?? undefined,
-      painSeverity: selectedPain ? severity : undefined,
-    });
-    router.push("/today");
+    try {
+      await repo.logRun({
+        sessionId: state.session.id,
+        rpe,
+        painAreaId: selectedPain ?? undefined,
+        painSeverity: selectedPain ? severity : undefined,
+      });
+      setWriteError(null);
+      router.push("/today");
+    } catch (err) {
+      setWriteError(err);
+    }
   }, [rpe, router, selectedPain, severity, state]);
 
   const handleSelectPain = useCallback((id: string | null) => {
@@ -129,6 +139,7 @@ export function LogScreen({ focusPain = false }: { focusPain?: boolean }) {
         >
           SAVE LOG
         </button>
+        <WriteErrorLine error={writeError} />
       </div>
     </div>
   );
