@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getIntegrationStatus, type IntegrationStatus } from "@/lib/integrations/status";
+import { getSyncStatus } from "@/lib/sync/staleness";
 
 type Provider = keyof IntegrationStatus;
 
@@ -23,15 +24,28 @@ const actionClass =
  * only, never contents). Defaults to "not connected" while the check is in
  * flight rather than adding a third loading state — status settles within
  * one round trip and there's no Instrument idiom for a loading row to match.
+ *
+ * Task 12: `authBroken` (from getSyncStatus, same per-provider-bundle fetch
+ * shape as getIntegrationStatus above — each row picks its own key out of
+ * a bundle covering both providers) drives a RECONNECT state: when a
+ * connected row's last sync failed with an auth-classified error, the
+ * DISCONNECT button is replaced by a RECONNECT link — same
+ * `/api/integrations/{provider}/connect` navigation as the "not connected"
+ * CONNECT link, only the label text differs, per the brief's "RECONNECT is
+ * the same navigation with different label text" instruction.
  */
 export function ConnectionRow({ provider, label }: { provider: Provider; label: string }) {
   const [connected, setConnected] = useState(false);
+  const [authBroken, setAuthBroken] = useState(false);
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     getIntegrationStatus().then((status) => {
       if (!cancelled) setConnected(status[provider]);
+    });
+    getSyncStatus().then((status) => {
+      if (!cancelled) setAuthBroken(status[provider].authBroken);
     });
     return () => {
       cancelled = true;
@@ -57,7 +71,11 @@ export function ConnectionRow({ provider, label }: { provider: Provider; label: 
         </div>
       </div>
       <div className="flex flex-col items-end gap-[5px]">
-        {connected ? (
+        {connected && authBroken ? (
+          <a href={`/api/integrations/${provider}/connect`} className={actionClass}>
+            RECONNECT
+          </a>
+        ) : connected ? (
           <button type="button" onClick={handleDisconnect} disabled={pending} className={actionClass}>
             DISCONNECT
           </button>

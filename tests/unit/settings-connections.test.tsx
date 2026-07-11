@@ -15,19 +15,31 @@ import { ConnectionsSection } from "@/components/settings/ConnectionsSection";
  * just Whoop's hardcoded path.
  */
 
-const { getIntegrationStatusMock } = vi.hoisted(() => ({
+const { getIntegrationStatusMock, getSyncStatusMock } = vi.hoisted(() => ({
   getIntegrationStatusMock: vi.fn(),
+  getSyncStatusMock: vi.fn(),
 }));
 
 vi.mock("@/lib/integrations/status", () => ({
   getIntegrationStatus: getIntegrationStatusMock,
 }));
 
+// Task 12: RECONNECT state. Defaults to "nothing broken" for every test
+// below unless a test overrides it — mirrors getIntegrationStatusMock's
+// per-test `mockResolvedValue` usage rather than needing every existing
+// test in this file to know about sync status at all.
+const NOT_BROKEN = { whoop: { lastOkAt: new Date(), authBroken: false }, strava: { lastOkAt: new Date(), authBroken: false } };
+vi.mock("@/lib/sync/staleness", () => ({ getSyncStatus: getSyncStatusMock }));
+
 afterEach(() => {
   cleanup();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+});
+
+beforeEach(() => {
+  getSyncStatusMock.mockResolvedValue(NOT_BROKEN);
 });
 
 describe("ConnectionsSection (local mode)", () => {
@@ -50,6 +62,7 @@ describe("ConnectionsSection (local mode)", () => {
       expect(button).toBeDisabled();
     }
     expect(getIntegrationStatusMock).not.toHaveBeenCalled();
+    expect(getSyncStatusMock).not.toHaveBeenCalled();
   });
 });
 
@@ -121,6 +134,49 @@ describe("ConnectionsSection (supabase mode)", () => {
 
     await waitFor(() => expect(screen.getAllByRole("link", { name: "CONNECT" })).toHaveLength(2));
     expect(screen.queryByText("CONNECTED")).not.toBeInTheDocument();
+  });
+
+  it("Task 12: shows RECONNECT instead of DISCONNECT when Whoop is connected but its last sync auth-failed", async () => {
+    getIntegrationStatusMock.mockResolvedValue({ whoop: true, strava: false });
+    getSyncStatusMock.mockResolvedValue({
+      whoop: { lastOkAt: new Date(), authBroken: true },
+      strava: { lastOkAt: new Date(), authBroken: false },
+    });
+
+    render(<ConnectionsSection />);
+
+    expect(await screen.findByText("CONNECTED")).toBeInTheDocument();
+    const reconnectLink = await screen.findByRole("link", { name: "RECONNECT" });
+    // Same navigation as CONNECT — only the label differs (brief's exact wording).
+    expect(reconnectLink).toHaveAttribute("href", "/api/integrations/whoop/connect");
+    expect(screen.queryByRole("button", { name: "DISCONNECT" })).not.toBeInTheDocument();
+  });
+
+  it("Task 12: keeps DISCONNECT when Whoop is connected and its last sync succeeded", async () => {
+    getIntegrationStatusMock.mockResolvedValue({ whoop: true, strava: false });
+    getSyncStatusMock.mockResolvedValue({
+      whoop: { lastOkAt: new Date(), authBroken: false },
+      strava: { lastOkAt: new Date(), authBroken: false },
+    });
+
+    render(<ConnectionsSection />);
+
+    expect(await screen.findByRole("button", { name: "DISCONNECT" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "RECONNECT" })).not.toBeInTheDocument();
+  });
+
+  it("Task 12: an unconnected row shows plain CONNECT even when authBroken is (nonsensically) true", async () => {
+    getIntegrationStatusMock.mockResolvedValue({ whoop: false, strava: false });
+    getSyncStatusMock.mockResolvedValue({
+      whoop: { lastOkAt: new Date(), authBroken: true },
+      strava: { lastOkAt: new Date(), authBroken: false },
+    });
+
+    render(<ConnectionsSection />);
+
+    const connectLinks = await screen.findAllByRole("link", { name: "CONNECT" });
+    expect(connectLinks).toHaveLength(2);
+    expect(screen.queryByRole("link", { name: "RECONNECT" })).not.toBeInTheDocument();
   });
 
   it("labels each row with its own provider name", async () => {

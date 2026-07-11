@@ -8,6 +8,17 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
 }));
 
+// Task 12: see body.test.tsx's identical setup comment — default delegates
+// to the real (local-mode, no Supabase) getSyncStatus so every existing
+// test keeps its byte-identical local-mode rendering; only the dedicated
+// Task 12 test below overrides it.
+const { getSyncStatusMock } = vi.hoisted(() => ({ getSyncStatusMock: vi.fn() }));
+vi.mock("@/lib/sync/staleness", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/sync/staleness")>("@/lib/sync/staleness");
+  getSyncStatusMock.mockImplementation(actual.getSyncStatus);
+  return { ...actual, getSyncStatus: getSyncStatusMock };
+});
+
 beforeEach(() => {
   localStorage.clear();
   push.mockClear();
@@ -29,6 +40,23 @@ test("Log screen shows the imported Strava run with no SYNCED badge", async () =
   expect(screen.getByText("9:36")).toBeInTheDocument();
 
   expect(screen.queryByText("SYNCED")).not.toBeInTheDocument();
+
+  // Task 12: local mode has no sync concept — the stale marker never
+  // renders, so this screen is byte-identical to pre-Task-12 local mode.
+  expect(screen.queryByText(/STALE —/)).not.toBeInTheDocument();
+});
+
+test("Task 12: shows the stale marker under AUTO-IMPORTED · STRAVA when strava hasn't synced within the 1h activities threshold", async () => {
+  const twoHoursAgo = new Date(Date.now() - 2 * 3600e3);
+  getSyncStatusMock.mockResolvedValueOnce({
+    whoop: { lastOkAt: new Date(), authBroken: false },
+    strava: { lastOkAt: twoHoursAgo, authBroken: false },
+  });
+
+  render(<LogScreen />);
+
+  await screen.findByText("AUTO-IMPORTED · STRAVA");
+  expect(await screen.findByText("STALE — LAST SYNCED 2H AGO")).toBeInTheDocument();
 });
 
 test("RPE defaults to 4/10 and tapping a segment updates the readout", async () => {

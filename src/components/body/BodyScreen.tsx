@@ -11,6 +11,7 @@ import { VitalsCard } from "@/components/body/VitalsCard";
 import { SleepCard } from "@/components/body/SleepCard";
 import { Recovery7dCard } from "@/components/body/Recovery7dCard";
 import { PainManagerCard } from "@/components/body/PainManagerCard";
+import { StaleMarker } from "@/components/sync/StaleMarker";
 
 type BodyState = {
   recovery: RecoverySnapshot;
@@ -67,6 +68,7 @@ export function BodyScreen() {
 
       <div className="px-[22px] pt-[18px]">
         <Section header={{ label: "VITALS", context: "14 DAYS →" }}>
+          <StaleMarker sourceKey="whoop" />
           <VitalsCard
             hrv={recovery.hrv}
             hrvDeltaPct={recovery.hrvDeltaPct}

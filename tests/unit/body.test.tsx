@@ -1,6 +1,18 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { BodyScreen } from "@/components/body/BodyScreen";
+
+// Task 12: getSyncStatus defaults to the REAL implementation (local mode,
+// no Supabase touch — see staleness.ts) so every existing test below keeps
+// exercising byte-identical local-mode rendering; individual tests override
+// with `mockResolvedValueOnce` to exercise the stale-marker case without
+// disturbing that default for the rest of the file.
+const { getSyncStatusMock } = vi.hoisted(() => ({ getSyncStatusMock: vi.fn() }));
+vi.mock("@/lib/sync/staleness", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/sync/staleness")>("@/lib/sync/staleness");
+  getSyncStatusMock.mockImplementation(actual.getSyncStatus);
+  return { ...actual, getSyncStatus: getSyncStatusMock };
+});
 
 beforeEach(() => localStorage.clear());
 afterEach(cleanup);
@@ -30,6 +42,23 @@ test("Body screen shows recovery analytics and pain manager", async () => {
   expect(
     await screen.findByText("+ LOG SORENESS OR INJURY")
   ).toBeInTheDocument();
+
+  // Task 12: local mode has no sync concept — the stale marker never
+  // renders, so this screen is byte-identical to pre-Task-12 local mode.
+  expect(screen.queryByText(/STALE —/)).not.toBeInTheDocument();
+});
+
+test("Task 12: shows the stale marker under VITALS when whoop hasn't synced within the 3h recovery threshold", async () => {
+  const fourHoursAgo = new Date(Date.now() - 4 * 3600e3);
+  getSyncStatusMock.mockResolvedValueOnce({
+    whoop: { lastOkAt: fourHoursAgo, authBroken: false },
+    strava: { lastOkAt: new Date(), authBroken: false },
+  });
+
+  render(<BodyScreen />);
+
+  await screen.findByText("VITALS");
+  expect(await screen.findByText("STALE — LAST SYNCED 4H AGO")).toBeInTheDocument();
 });
 
 test("Tapping the Achilles · Left hotspot sets aria-pressed", async () => {
