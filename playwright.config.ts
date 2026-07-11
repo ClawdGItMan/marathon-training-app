@@ -18,8 +18,10 @@ const defaultWebServer = {
   port: 3000,
   // NOTE: if you already have `npm run dev` running without PLAYWRIGHT_TEST=1, the dev overlay is active and tab clicks may flake — stop your dev server before running e2e.
   reuseExistingServer: true,
-  // Bounded: a dev server that hasn't answered in 2 minutes is broken —
-  // fail fast instead of hanging on Playwright's open-ended default wait.
+  // Extend Playwright's 60s default webServer wait to 120s: cold Next
+  // builds (no .next cache) can take longer than 60s to answer, and a dev
+  // server that still hasn't responded by 2 minutes is genuinely broken —
+  // fail fast rather than hang further.
   timeout: 120_000,
   env: { ...process.env, PLAYWRIGHT_TEST: "1" },
 };
@@ -45,6 +47,7 @@ function supabaseModeWebServer() {
     command: `npm run dev -- --port ${SUPABASE_MODE_PORT}`,
     port: SUPABASE_MODE_PORT,
     reuseExistingServer: true,
+    // Same 120s extension of Playwright's 60s default as defaultWebServer above.
     timeout: 120_000,
     env: {
       ...process.env,

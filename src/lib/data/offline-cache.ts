@@ -28,6 +28,50 @@ export class OfflineError extends Error {
   }
 }
 
+/**
+ * Extracts a message string from any thrown value: real Error instances,
+ * plain string throws, and PostgREST's non-throwOnError error shape (a
+ * plain `{ message, details, hint, code }` object that is NOT an Error
+ * instance — see @supabase/postgrest-js's PostgrestBuilder, which returns
+ * that shape for both server errors and network failures alike).
+ */
+function errorMessage(err: unknown): string {
+  if (typeof err === "string") return err;
+  if (err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string") {
+    return (err as { message: string }).message;
+  }
+  return "";
+}
+
+/**
+ * Distinguishes genuine transport failures (offline, DNS down, request
+ * aborted mid-flight) from server-returned errors that merely reached us
+ * over a working connection.
+ *
+ * supabase-js/PostgREST throws `Error(error.message)`-shaped values straight
+ * from PostgREST/RPC responses (see src/lib/data/supabase-repo.ts's
+ * `if (error) throw error`) for things like RLS denials (42501, "permission
+ * denied for table goals") and decide_proposal's business-rule raises
+ * ("re-decide guard: proposal already expired") — those are SERVER
+ * responses that arrived fine over the network and must NOT be treated as
+ * offline/retryable. Only match:
+ *  - `TypeError`, the shape the Fetch API itself throws for a failed
+ *    request (Chrome: "Failed to fetch", Firefox: "NetworkError when
+ *    attempting to fetch resource", Safari: "Load failed");
+ *  - a message matching known network/transport failure text (also covers
+ *    postgrest-js's non-throwOnError network-failure object, which is a
+ *    plain object — not an Error/TypeError instance — whose `message` is
+ *    built from the underlying fetch error, e.g. "TypeError: Failed to
+ *    fetch");
+ *  - or the browser reporting itself offline (`navigator.onLine === false`),
+ *    regardless of the error shape.
+ */
+export function isNetworkError(err: unknown): boolean {
+  if (err instanceof TypeError) return true;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
+  return /failed to fetch|fetch failed|network|ECONNREFUSED|ETIMEDOUT|abort/i.test(errorMessage(err));
+}
+
 export type StaleEntry = { servedFromCache: boolean; cachedAt: string | null };
 export type StaleInfo = Record<string, StaleEntry>;
 
@@ -64,9 +108,12 @@ function writeCache<T>(key: string, value: T): void {
 }
 
 /**
- * live → write-through cache on success; on live failure, serve the
- * last-known cached value (Zod-revalidated); with no usable cache, rethrow
- * as a typed OfflineError.
+ * live → write-through cache on success; on a genuine network failure,
+ * serve the last-known cached value (Zod-revalidated), or a typed
+ * OfflineError if there's no usable cache. Any other error (RLS denial,
+ * "Unknown session", or any other server-returned rejection) is NOT a
+ * connectivity problem — it rethrows untouched rather than silently
+ * masking it behind stale cached data.
  */
 async function read<T>(method: string, key: string, schema: z.ZodType<T>, live: () => Promise<T>): Promise<T> {
   try {
@@ -75,6 +122,7 @@ async function read<T>(method: string, key: string, schema: z.ZodType<T>, live: 
     setStale(method, false, new Date().toISOString());
     return value;
   } catch (err) {
+    if (!isNetworkError(err)) throw err;
     const cached = readCache(key, schema);
     if (!cached) throw new OfflineError(`${method}: network failure and no usable cached value`, { cause: err });
     setStale(method, true, cached.cachedAt);
@@ -82,11 +130,19 @@ async function read<T>(method: string, key: string, schema: z.ZodType<T>, live: 
   }
 }
 
-/** Writes are always live-only; never read from or written to the cache. */
+/**
+ * Writes are always live-only; never read from or written to the cache.
+ * Only a genuine network failure is wrapped as OfflineError — a
+ * business-rule rejection (e.g. decide_proposal's re-decide guard raising
+ * "already expired") is a valid server response, not a dropped connection,
+ * and must reach the caller as the original error, not something a future
+ * error UI could misread as "retry when online".
+ */
 async function write<T>(method: string, fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (err) {
+    if (!isNetworkError(err)) throw err;
     throw new OfflineError(`${method}: write failed`, { cause: err });
   }
 }

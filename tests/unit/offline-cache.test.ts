@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Repo } from "@/lib/data/repo";
 import type { RaceGoal, PlannedSession } from "@/lib/domain/types";
-import { getStaleInfo, OfflineError, withOfflineCache, __resetStaleInfoForTests } from "@/lib/data/offline-cache";
+import {
+  getStaleInfo,
+  isNetworkError,
+  OfflineError,
+  withOfflineCache,
+  __resetStaleInfoForTests,
+} from "@/lib/data/offline-cache";
 
 const GOAL: RaceGoal = {
   name: "City Marathon",
@@ -139,5 +145,77 @@ describe("withOfflineCache", () => {
     expect(
       Object.keys(localStorage).filter((k) => k.startsWith("marathon.phase2.cache.")).length
     ).toBe(0);
+  });
+
+  it("rethrows a PostgREST-style server error on read (RLS denial) instead of masking it with cache", async () => {
+    // Prime the cache with a good value, then make the live call fail with
+    // a server-side rejection that reached us over a perfectly good
+    // connection (RLS denial) — this must NOT be treated like offline.
+    const getGoal = vi
+      .fn()
+      .mockResolvedValueOnce(GOAL)
+      .mockRejectedValueOnce(new Error("permission denied for table goals"));
+    const live = makeRepo({ getGoal });
+    const cached = withOfflineCache(live);
+
+    await cached.getGoal(); // primes the cache
+    await expect(cached.getGoal()).rejects.toThrow("permission denied for table goals");
+
+    // Rethrown error must be the original, not an OfflineError, and must
+    // not have been reported as served-from-cache.
+    const info = getStaleInfo();
+    expect(info.getGoal?.servedFromCache).toBe(false);
+  });
+
+  it("serves cache on read when the live call fails with a genuine fetch TypeError", async () => {
+    const getGoal = vi
+      .fn()
+      .mockResolvedValueOnce(GOAL)
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const live = makeRepo({ getGoal });
+    const cached = withOfflineCache(live);
+
+    await cached.getGoal(); // primes the cache
+    const result = await cached.getGoal();
+
+    expect(result).toEqual(GOAL);
+    const info = getStaleInfo();
+    expect(info.getGoal?.servedFromCache).toBe(true);
+  });
+
+  it("rethrows a business-rule rejection on write (decide_proposal re-decide guard) as the original error, not OfflineError", async () => {
+    const decideProposal = vi
+      .fn()
+      .mockRejectedValue(new Error("re-decide guard: proposal already expired"));
+    const live = makeRepo({ decideProposal });
+    const cached = withOfflineCache(live);
+
+    await expect(cached.decideProposal("p1", "accepted")).rejects.toThrow(
+      "re-decide guard: proposal already expired"
+    );
+    await expect(cached.decideProposal("p1", "accepted")).rejects.not.toBeInstanceOf(OfflineError);
+  });
+
+  it("wraps a genuine network failure on write as OfflineError", async () => {
+    const logRun = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const live = makeRepo({ logRun });
+    const cached = withOfflineCache(live);
+
+    await expect(cached.logRun({ rpe: 5 })).rejects.toBeInstanceOf(OfflineError);
+  });
+});
+
+describe("isNetworkError", () => {
+  it("matches genuine transport failures", () => {
+    expect(isNetworkError(new TypeError("Failed to fetch"))).toBe(true);
+    expect(isNetworkError(new Error("NetworkError when attempting to fetch resource"))).toBe(true);
+    expect(isNetworkError(new Error("request aborted"))).toBe(true);
+    expect(isNetworkError({ message: "TypeError: Failed to fetch", code: "" })).toBe(true);
+  });
+
+  it("does not match server-returned errors that arrived over a working connection", () => {
+    expect(isNetworkError(new Error("permission denied for table goals"))).toBe(false);
+    expect(isNetworkError(new Error("re-decide guard: proposal already expired"))).toBe(false);
+    expect(isNetworkError(new Error("Unknown session: sat-long"))).toBe(false);
   });
 });
