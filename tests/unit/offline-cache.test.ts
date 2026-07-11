@@ -211,6 +211,7 @@ describe("isNetworkError", () => {
     expect(isNetworkError(new Error("NetworkError when attempting to fetch resource"))).toBe(true);
     expect(isNetworkError(new Error("request aborted"))).toBe(true);
     expect(isNetworkError({ message: "TypeError: Failed to fetch", code: "" })).toBe(true);
+    expect(isNetworkError(new Error("TypeError: Load failed"))).toBe(true);
   });
 
   it("does not match server-returned errors that arrived over a working connection", () => {

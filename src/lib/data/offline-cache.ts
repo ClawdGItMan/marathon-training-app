@@ -69,7 +69,7 @@ function errorMessage(err: unknown): string {
 export function isNetworkError(err: unknown): boolean {
   if (err instanceof TypeError) return true;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
-  return /failed to fetch|fetch failed|network|ECONNREFUSED|ETIMEDOUT|abort/i.test(errorMessage(err));
+  return /failed to fetch|fetch failed|load failed|network|ECONNREFUSED|ETIMEDOUT|abort/i.test(errorMessage(err));
 }
 
 export type StaleEntry = { servedFromCache: boolean; cachedAt: string | null };
