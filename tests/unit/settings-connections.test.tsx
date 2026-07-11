@@ -188,4 +188,38 @@ describe("ConnectionsSection (supabase mode)", () => {
     expect(screen.getByText("Whoop")).toBeInTheDocument();
     expect(screen.getByText("Strava")).toBeInTheDocument();
   });
+
+  it("fix loop 1: fails open when getSyncStatus rejects — DISCONNECT (not RECONNECT), warning logged, no unhandled rejection", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    getIntegrationStatusMock.mockResolvedValue({ whoop: true, strava: true });
+    getSyncStatusMock.mockRejectedValue(new Error("sync_runs query failed"));
+
+    render(<ConnectionsSection />);
+
+    // A transient query failure must not fake an auth alarm — authBroken
+    // stays at its initial false, so connected rows keep DISCONNECT.
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "DISCONNECT" })).toHaveLength(2));
+    expect(screen.queryByRole("link", { name: "RECONNECT" })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("fail-open"), expect.any(Error))
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("fix loop 1: fails open when getIntegrationStatus rejects — NOT CONNECTED + CONNECT, warning logged, no unhandled rejection", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    getIntegrationStatusMock.mockRejectedValue(new Error("server action failed"));
+
+    render(<ConnectionsSection />);
+
+    // connected stays at its initial false — the row keeps the plain
+    // CONNECT link rather than flashing a wrong CONNECTED/DISCONNECT state.
+    await waitFor(() =>
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("fail-open"), expect.any(Error))
+    );
+    expect(screen.getAllByText("NOT CONNECTED")).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "CONNECT" })).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "DISCONNECT" })).not.toBeInTheDocument();
+    warnSpy.mockRestore();
+  });
 });

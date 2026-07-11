@@ -31,19 +31,27 @@ export function StaleMarker({ sourceKey }: { sourceKey: SyncSource }) {
 
   useEffect(() => {
     let cancelled = false;
-    getSyncStatus().then((status) => {
-      if (cancelled) return;
+    getSyncStatus()
+      .then((status) => {
+        if (cancelled) return;
 
-      const { lastOkAt } = status[sourceKey];
-      if (!lastOkAt) {
-        setHoursStale(null);
-        return;
-      }
+        const { lastOkAt } = status[sourceKey];
+        if (!lastOkAt) {
+          setHoursStale(null);
+          return;
+        }
 
-      const thresholdMs = sourceKey === "whoop" ? STALE_RECOVERY_MS : STALE_ACTIVITIES_MS;
-      const elapsedMs = Date.now() - lastOkAt.getTime();
-      setHoursStale(elapsedMs > thresholdMs ? Math.floor(elapsedMs / 3_600_000) : null);
-    });
+        const thresholdMs = sourceKey === "whoop" ? STALE_RECOVERY_MS : STALE_ACTIVITIES_MS;
+        const elapsedMs = Date.now() - lastOkAt.getTime();
+        setHoursStale(elapsedMs > thresholdMs ? Math.floor(elapsedMs / 3_600_000) : null);
+      })
+      .catch((err) => {
+        // Fail-open ON PURPOSE (fix loop 1): a transient sync_runs query
+        // failure must not fake a STALE alarm, so state stays at its
+        // initial null (no marker). Handled explicitly rather than left as
+        // an unhandled rejection; there's no error-UI idiom to render into.
+        console.warn("StaleMarker: getSyncStatus failed; rendering no marker (fail-open)", err);
+      });
     return () => {
       cancelled = true;
     };

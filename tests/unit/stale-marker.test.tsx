@@ -110,6 +110,20 @@ describe("StaleMarker", () => {
     expect(marker).toHaveClass("font-mono", "text-[10px]", "tracking-[.18em]", "text-[#5c6168]");
     vi.useRealTimers();
   });
+
+  it("fails open when getSyncStatus rejects: no marker, no unhandled rejection, warning logged (fix loop 1)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    getSyncStatusMock.mockRejectedValue(new Error("sync_runs query failed"));
+
+    const { container } = render(<StaleMarker sourceKey="whoop" />);
+
+    // A transient query failure must not fake a STALE alarm — the marker
+    // stays hidden (state at its initial null), and the rejection is
+    // handled (vitest itself fails the run on unhandled rejections).
+    await waitFor(() => expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("fail-open"), expect.any(Error)));
+    expect(container).toBeEmptyDOMElement();
+    warnSpy.mockRestore();
+  });
 });
 
 // "Hidden in local mode with the REAL (unmocked) getSyncStatus" is exercised

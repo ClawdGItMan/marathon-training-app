@@ -41,12 +41,25 @@ export function ConnectionRow({ provider, label }: { provider: Provider; label: 
 
   useEffect(() => {
     let cancelled = false;
-    getIntegrationStatus().then((status) => {
-      if (!cancelled) setConnected(status[provider]);
-    });
-    getSyncStatus().then((status) => {
-      if (!cancelled) setAuthBroken(status[provider].authBroken);
-    });
+    // Both status fetches fail open ON PURPOSE (fix loop 1): a transient
+    // query failure must not fake a state change (RECONNECT on a blip, or
+    // a connected row flashing NOT CONNECTED), so state stays at its
+    // initial value. Handled explicitly rather than left as unhandled
+    // rejections; there's no error-UI idiom to render into.
+    getIntegrationStatus()
+      .then((status) => {
+        if (!cancelled) setConnected(status[provider]);
+      })
+      .catch((err) => {
+        console.warn("ConnectionRow: getIntegrationStatus failed; keeping NOT CONNECTED (fail-open)", err);
+      });
+    getSyncStatus()
+      .then((status) => {
+        if (!cancelled) setAuthBroken(status[provider].authBroken);
+      })
+      .catch((err) => {
+        console.warn("ConnectionRow: getSyncStatus failed; not showing RECONNECT (fail-open)", err);
+      });
     return () => {
       cancelled = true;
     };
