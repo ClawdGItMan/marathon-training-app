@@ -24,7 +24,7 @@ const { getAdminClientMock } = vi.hoisted(() => ({ getAdminClientMock: vi.fn() }
 vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: getAdminClientMock }));
 
 const { GET: webhookGet, POST: webhookPost } = await import("@/app/api/webhooks/strava/route");
-const { importStravaActivity } = await import("@/lib/integrations/strava/sync");
+const { importStravaActivity, syncStrava } = await import("@/lib/integrations/strava/sync");
 const { stravaActivitySchema } = await import("@/lib/integrations/strava/wire");
 const { rowToActivity } = await import("@/lib/data/row-mappers");
 
@@ -266,6 +266,62 @@ describe("POST /api/webhooks/strava", () => {
     expect(tables.activities.rows()).toHaveLength(0);
     expect(tables.sync_runs.rows()).toHaveLength(1);
     expect(tables.sync_runs.rows()[0]).toMatchObject({ ok: false });
+  });
+
+  it("M1: a plain-object processing rejection logs its .message as the detail, never [object Object]", async () => {
+    const { client: admin, tables } = createFakeAdmin(TABLES);
+    getAdminClientMock.mockReturnValue(admin);
+    seedConnectedUser(tables);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw { message: "plain-object rejection from postgrest", code: "PGRST301" };
+      })
+    );
+
+    const response = await webhookPost(postRequest(createEvent()));
+
+    expect(response.status).toBe(200);
+    expect(tables.sync_runs.rows()).toHaveLength(1);
+    expect(tables.sync_runs.rows()[0]).toMatchObject({
+      ok: false,
+      detail: "plain-object rejection from postgrest",
+    });
+  });
+});
+
+// ---- syncStrava sync_runs contract (M1) ----------------------------------------
+
+describe("syncStrava sync_runs contract (M1)", () => {
+  it("a sync_runs insert failure on the success path resolves {ok:false} instead of throwing", async () => {
+    const { client: admin, tables } = createFakeAdmin(TABLES);
+    seedConnectedUser(tables);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(input.toString());
+        if (url.pathname === "/api/v3/athlete/activities") return jsonResponse(200, []);
+        throw new Error(`Unhandled URL: ${url.href}`);
+      })
+    );
+
+    // Reads on sync_runs still work (the lastOkStravaSync anchor); only the
+    // bookkeeping INSERT rejects.
+    const failingAdmin = {
+      from(name: string) {
+        const builder = (admin as unknown as { from: (n: string) => Record<string, unknown> }).from(name);
+        if (name !== "sync_runs") return builder;
+        return {
+          ...builder,
+          insert: () => Promise.resolve({ error: { message: "sync_runs insert denied" } }),
+        };
+      },
+    } as unknown as (typeof admin);
+    getAdminClientMock.mockReturnValue(failingAdmin);
+
+    const result = await syncStrava(failingAdmin, USER_ID);
+
+    expect(result).toEqual({ ok: false, items: 0, detail: "sync_runs insert denied" });
   });
 });
 

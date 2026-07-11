@@ -216,6 +216,36 @@ describe("GET /api/cron/morning", () => {
     expect(whoopOrder).toBeLessThan(stravaOrder);
   });
 
+  it("M1: one profile's throwing sync records synced:false and does not abort the remaining profiles", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-10T10:00:00Z")); // 6am ET for both
+    const admin = {
+      from: () =>
+        makeQueryBuilder([
+          { id: "user-1", home_timezone: "America/New_York" },
+          { id: "user-2", home_timezone: "America/New_York" },
+        ]),
+    };
+    getAdminClientMock.mockReturnValue(admin);
+    // user-1's whoop sync throws (e.g. a sync_runs bookkeeping failure that
+    // escaped syncWhoop's own guard); user-2 must still sync.
+    syncWhoopMock.mockRejectedValueOnce(new Error("boom")).mockResolvedValue({ ok: true, items: 1 });
+    syncStravaMock.mockResolvedValue({ ok: true, items: 1 });
+
+    const response = await cronGet(authedRequest());
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.results).toEqual([
+      { userId: "user-1", synced: false },
+      { userId: "user-2", synced: true },
+    ]);
+    expect(syncWhoopMock).toHaveBeenCalledTimes(2);
+    // user-1's strava sync was skipped by the throw; user-2's ran.
+    expect(syncStravaMock).toHaveBeenCalledTimes(1);
+    expect(syncStravaMock).toHaveBeenCalledWith(admin, "user-2");
+  });
+
   it("iterates every profile, syncing only the ones whose local hour is 6", async () => {
     vi.useFakeTimers();
     // 10:00 UTC: 6am America/New_York (EDT), but 3am America/Los_Angeles (PDT).

@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { dedupeStrava, whoopSideRowSchema } from "@/lib/activities/dedupe";
 import { loadTokens } from "@/lib/integrations/oauth";
 import { localDayOf } from "@/lib/sync/timezone";
+import { errorMessage } from "@/lib/util/error-message";
 import {
   fetchWhoopCycles,
   fetchWhoopRecoveries,
@@ -67,6 +68,43 @@ const prevSnapshotRowSchema = z.object({
   rhr: z.number().nullable(),
 });
 
+// ---- since anchor (I5, mirrors strava/sync.ts's lastOkStravaSync) -----------
+
+/**
+ * Lookback subtracted from the last-ok anchor. Why not anchor at lastOk
+ * exactly: (a) dedupe's crash-window self-healing relies on RE-FETCHING —
+ * if a rotated-token crash or a mid-merge crash left a workout deleted or
+ * half-processed, only a fetch window that still covers it can re-insert
+ * and re-merge it (see dedupe.ts's "self-healing" note); (b) Whoop scores
+ * arrive late and records get edited after the fact — 7 days comfortably
+ * covers late-arriving edits without re-pulling full history every morning.
+ */
+export const WHOOP_SYNC_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
+
+const lastSyncRowSchema = z.object({ ran_at: z.string() });
+
+/** Latest successful (`ok=true`) `whoop` sync_runs row's `ran_at` for `userId`, or `undefined` if never synced ok. */
+async function lastOkWhoopSync(admin: SupabaseClient, userId: string): Promise<Date | undefined> {
+  const { data, error } = await admin
+    .from("sync_runs")
+    .select("ran_at")
+    .eq("user_id", userId)
+    .eq("source", "whoop")
+    .eq("ok", true)
+    .order("ran_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return undefined;
+  return new Date(lastSyncRowSchema.parse(data).ran_at);
+}
+
+/** `lastOk - 7d lookback`, or `undefined` (full history) on a first-ever sync. */
+async function anchoredWhoopSince(admin: SupabaseClient, userId: string): Promise<Date | undefined> {
+  const lastOk = await lastOkWhoopSync(admin, userId);
+  return lastOk ? new Date(lastOk.getTime() - WHOOP_SYNC_LOOKBACK_MS) : undefined;
+}
+
 export async function syncWhoop(
   admin: SupabaseClient,
   userId: string,
@@ -81,15 +119,22 @@ export async function syncWhoop(
     const ctx: WhoopAuthContext = { userId, tokens: { access: tokens.access, refresh: tokens.refresh } };
     const tz = await loadHomeTimezone(admin, userId);
 
+    // I5: no explicit `since` -> anchor to the last successful whoop sync
+    // (minus the 7d lookback), mirroring syncStrava's `opts.after ??
+    // lastOkStravaSync` — so BOTH callers (the morning cron and
+    // refreshIfStale) stop re-pulling full history on every run. A
+    // first-ever sync (no ok row) stays full-history.
+    const since = opts.since ?? (await anchoredWhoopSince(admin, userId));
+
     // Sequential, not Promise.all: whoopFetch mutates ctx.tokens in place on
     // a 401-triggered refresh, and Whoop rotates the refresh token on every
     // use. Concurrent calls could each observe a 401 and race to refresh
     // with the same (single-use) refresh token, and the loser would fail.
     // Sequential calls guarantee at most one refresh per sync run.
-    const recoveries = await fetchWhoopRecoveries(ctx, opts.since);
-    const sleeps = await fetchWhoopSleeps(ctx, opts.since);
-    const cycles = await fetchWhoopCycles(ctx, opts.since);
-    const workouts = await fetchWhoopWorkouts(ctx, opts.since);
+    const recoveries = await fetchWhoopRecoveries(ctx, since);
+    const sleeps = await fetchWhoopSleeps(ctx, since);
+    const cycles = await fetchWhoopCycles(ctx, since);
+    const workouts = await fetchWhoopWorkouts(ctx, since);
 
     const sleepById = new Map(sleeps.map((s) => [s.id, s]));
     const cycleById = new Map(cycles.map((c) => [c.id, c]));
@@ -214,10 +259,18 @@ export async function syncWhoop(
       }
     }
 
-    return finish(admin, userId, { ok: true, items: snapshots.length + activityRows.length });
+    // M1: `await` is load-bearing — without it a rejected finish (the
+    // sync_runs bookkeeping insert failing) escapes this try and the caller
+    // gets a throw instead of the documented never-throws SyncResult.
+    return await finish(admin, userId, { ok: true, items: snapshots.length + activityRows.length });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    return finish(admin, userId, { ok: false, items: 0, detail });
+    const result = { ok: false, items: 0, detail: errorMessage(err) };
+    try {
+      return await finish(admin, userId, result);
+    } catch {
+      // Even the failure bookkeeping failed — still honor the contract.
+      return result;
+    }
   }
 }
 

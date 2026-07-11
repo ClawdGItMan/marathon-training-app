@@ -91,29 +91,12 @@ export function smokeSinceDate(now: Date = new Date()): Date {
 }
 
 /**
- * Extracts a human-readable message from a caught value: an `Error`'s
- * `.message`, a Postgrest-style error object's `.message` (supabase-js
- * query failures throw/reject with plain `{message, code, details, hint}`
- * objects, NOT `Error` instances — the `err instanceof Error ? err.message
- * : String(err)` pattern used elsewhere in this codebase, e.g.
- * whoop/sync.ts's `finish`, silently degrades those to the useless string
- * "[object Object]"), or `String(err)` as a last resort. Both smoke
- * scripts route every caught error through this so a live API/DB failure
- * is always reported with its actual message, per task-14-brief.md's
- * "API error → the error message" requirement.
+ * Human-readable message from a caught value. Moved to
+ * src/lib/util/error-message.ts (final-review fix M1) so the sync
+ * orchestrators and webhook route share it; re-exported here so the smoke
+ * scripts (and their tests) keep their existing import path.
  */
-export function errorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  if (
-    err &&
-    typeof err === "object" &&
-    "message" in err &&
-    typeof (err as { message: unknown }).message === "string"
-  ) {
-    return (err as { message: string }).message;
-  }
-  return String(err);
-}
+export { errorMessage } from "../../src/lib/util/error-message";
 
 /** The shape both smoke scripts' `run*Smoke` functions resolve to — never a throw; `main()` maps it to exit 0/1. */
 export type SmokeResult = { ok: boolean; message: string };

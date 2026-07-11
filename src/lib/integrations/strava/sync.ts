@@ -6,6 +6,7 @@ import { RUN_EQUIVALENT_SPORTS } from "@/lib/activities/sports";
 import { rowToSession } from "@/lib/data/row-mappers";
 import { loadTokens } from "@/lib/integrations/oauth";
 import { localDayOf } from "@/lib/sync/timezone";
+import { errorMessage } from "@/lib/util/error-message";
 import { listActivities, type StravaAuthContext } from "./client";
 import type { StravaActivity } from "./wire";
 
@@ -173,10 +174,18 @@ export async function syncStrava(
       await importStravaActivity(admin, userId, activity);
     }
 
-    return finish(admin, userId, { ok: true, items: activities.length });
+    // M1: `await` is load-bearing — without it a rejected finish (the
+    // sync_runs bookkeeping insert failing) escapes this try and the caller
+    // gets a throw instead of the documented never-throws SyncResult.
+    return await finish(admin, userId, { ok: true, items: activities.length });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    return finish(admin, userId, { ok: false, items: 0, detail });
+    const result = { ok: false, items: 0, detail: errorMessage(err) };
+    try {
+      return await finish(admin, userId, result);
+    } catch {
+      // Even the failure bookkeeping failed — still honor the contract.
+      return result;
+    }
   }
 }
 

@@ -69,9 +69,19 @@ export async function GET(request: NextRequest) {
     // pre-existing Strava row — so this ordering is a convention, not a
     // correctness requirement. Whoop-first is kept because recovery data
     // (the readiness ring) is the morning sync's primary payload.
-    await syncWhoop(admin, profile.id);
-    await syncStrava(admin, profile.id);
-    results.push({ userId: profile.id, synced: true });
+    //
+    // M1: per-profile try/catch — syncWhoop/syncStrava resolve SyncResult
+    // rather than throwing by contract, but if anything DOES escape (that
+    // contract regressing, an unexpected client failure), one profile's
+    // blowup must not abort the remaining profiles' 6am sync. This is what
+    // makes the multi-profile scaling claim above actually true.
+    try {
+      await syncWhoop(admin, profile.id);
+      await syncStrava(admin, profile.id);
+      results.push({ userId: profile.id, synced: true });
+    } catch {
+      results.push({ userId: profile.id, synced: false });
+    }
   }
 
   return NextResponse.json({ ok: true, results });

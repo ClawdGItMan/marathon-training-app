@@ -36,9 +36,8 @@ vi.mock("@/lib/supabase/admin", () => ({ getAdminClient: getAdminClientMock }));
 const { localDayOf } = await import("@/lib/sync/timezone");
 const { STALE_RECOVERY_MS, STALE_ACTIVITIES_MS } = await import("@/lib/sync/staleness");
 const { WHOOP_TOKEN_URL } = await import("@/lib/integrations/whoop/client");
-const { syncWhoop, loadLabelFor, ELEVATED_DAY_STRAIN_THRESHOLD } = await import(
-  "@/lib/integrations/whoop/sync"
-);
+const { syncWhoop, loadLabelFor, ELEVATED_DAY_STRAIN_THRESHOLD, WHOOP_SYNC_LOOKBACK_MS } =
+  await import("@/lib/integrations/whoop/sync");
 const { saveTokens } = await import("@/lib/integrations/oauth");
 const { rowToRecovery } = await import("@/lib/data/row-mappers");
 
@@ -74,7 +73,7 @@ function rowMatches(row: Row, filters: FakeFilter[]): boolean {
   });
 }
 
-function makeTable() {
+function makeTable(defaults?: () => Row) {
   const rows: Row[] = [];
   return {
     rows: () => rows,
@@ -83,7 +82,10 @@ function makeTable() {
     },
     insert(payload: Row | Row[]) {
       const incoming = Array.isArray(payload) ? payload : [payload];
-      rows.push(...incoming.map((r) => ({ ...r })));
+      // `defaults` mimics DB column defaults the code under test relies on
+      // reading back (I5: sync_runs.ran_at `default now()` feeds
+      // lastOkWhoopSync's anchor on a SECOND sync in the same test).
+      rows.push(...incoming.map((r) => ({ ...(defaults?.() ?? {}), ...r })));
     },
     upsert(payload: Row | Row[], opts?: { onConflict?: string; ignoreDuplicates?: boolean }): Row[] {
       const incoming = Array.isArray(payload) ? payload : [payload];
@@ -114,7 +116,24 @@ function makeTable() {
 
 function makeQueryBuilder(table: ReturnType<typeof makeTable>) {
   const filters: FakeFilter[] = [];
-  const matching = () => table.rows().filter((r) => rowMatches(r, filters));
+  // I5 HARNESS extension (test cases above/below unchanged): order/limit,
+  // consumed by lastOkWhoopSync's `.order("ran_at", {ascending:false}).limit(1)`.
+  let orderCol: string | undefined;
+  let orderAsc = true;
+  let limitN: number | undefined;
+  const matching = () => {
+    let rows = table.rows().filter((r) => rowMatches(r, filters));
+    if (orderCol) {
+      const col = orderCol;
+      rows = [...rows].sort((a, b) => {
+        const av = String(a[col]);
+        const bv = String(b[col]);
+        return av < bv ? (orderAsc ? -1 : 1) : av > bv ? (orderAsc ? 1 : -1) : 0;
+      });
+    }
+    if (limitN !== undefined) rows = rows.slice(0, limitN);
+    return rows;
+  };
   const builder = {
     select() {
       return builder;
@@ -130,6 +149,15 @@ function makeQueryBuilder(table: ReturnType<typeof makeTable>) {
     not(col: string, _op: "is", val: unknown) {
       void _op;
       filters.push(["not-is", col, val]);
+      return builder;
+    },
+    order(col: string, opts?: { ascending?: boolean }) {
+      orderCol = col;
+      orderAsc = opts?.ascending ?? true;
+      return builder;
+    },
+    limit(n: number) {
+      limitN = n;
       return builder;
     },
     maybeSingle: () => Promise.resolve({ data: matching()[0] ?? null, error: null }),
@@ -173,7 +201,7 @@ function createFakeAdmin() {
     integration_tokens: makeTable(),
     recovery_snapshots: makeTable(),
     activities: makeTable(),
-    sync_runs: makeTable(),
+    sync_runs: makeTable(() => ({ ran_at: new Date().toISOString() })),
   };
   const client = {
     from: (name: keyof typeof tables) => makeQueryBuilder(tables[name]),
@@ -362,6 +390,125 @@ describe("syncWhoop", () => {
 
     expect(tables.sync_runs.rows()).toHaveLength(1);
     expect(tables.sync_runs.rows()[0]).toMatchObject({ user_id: userId, source: "whoop", ok: true });
+  });
+
+  it("M1: a plain-object rejection lands as a readable detail string in sync_runs (never [object Object])", async () => {
+    const { client: admin, tables } = createFakeAdmin();
+    getAdminClientMock.mockReturnValue(admin);
+    await seedConnectedUser(tables, userId);
+    // PostgREST-style rejection: a plain {message, code} object, NOT an Error.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw { message: "plain-object rejection from postgrest", code: "PGRST301" };
+      })
+    );
+
+    const result = await syncWhoop(admin, userId, {});
+
+    expect(result.ok).toBe(false);
+    expect(result.detail).toBe("plain-object rejection from postgrest");
+    expect(tables.sync_runs.rows()).toHaveLength(1);
+    expect(tables.sync_runs.rows()[0]).toMatchObject({
+      ok: false,
+      detail: "plain-object rejection from postgrest",
+    });
+  });
+
+  it("M1: a sync_runs insert failure on the success path resolves {ok:false} instead of throwing", async () => {
+    const { client: admin, tables } = createFakeAdmin();
+    await seedConnectedUser(tables, userId);
+    installWhoopFetchMock(whoopFixtures());
+
+    // Same fake admin, except sync_runs INSERTs fail (reads still work, so
+    // the anchor lookup and the whole successful sync run normally — only
+    // the final bookkeeping write rejects).
+    const failingAdmin = {
+      from(name: string) {
+        const builder = (admin as unknown as { from: (n: string) => Record<string, unknown> }).from(name);
+        if (name !== "sync_runs") return builder;
+        return {
+          ...builder,
+          insert: () => Promise.resolve({ error: { message: "sync_runs insert denied" } }),
+        };
+      },
+    } as unknown as SupabaseClient;
+    getAdminClientMock.mockReturnValue(failingAdmin);
+
+    const result = await syncWhoop(failingAdmin, userId, {});
+
+    expect(result).toEqual({ ok: false, items: 0, detail: "sync_runs insert denied" });
+    // The data writes themselves DID land — only the bookkeeping failed.
+    expect(tables.recovery_snapshots.rows()).toHaveLength(1);
+  });
+
+  // ---- I5: since anchor (mirrors syncStrava's lastOkStravaSync) -----------
+
+  function whoopFixtures(): Fixtures {
+    return { recovery: recoveryFixture, sleep: sleepFixture, cycle: cycleFixture, workout: workoutFixture };
+  }
+
+  function dataCallUrls(fetchMock: ReturnType<typeof installWhoopFetchMock>["fetchMock"]): URL[] {
+    return fetchMock.mock.calls
+      .map((call) => new URL(String(call[0])))
+      .filter((url) => url.href !== WHOOP_TOKEN_URL);
+  }
+
+  it("I5 anchored: a previous ok sync_runs row anchors every fetcher to since = lastOk - 7d lookback", async () => {
+    const { client: admin, tables } = createFakeAdmin();
+    getAdminClientMock.mockReturnValue(admin);
+    await seedConnectedUser(tables, userId);
+    // Latest OK whoop run is 07-08; the newer FAILED whoop run and the newer
+    // ok STRAVA run must not move the anchor.
+    tables.sync_runs.seed({ user_id: userId, source: "whoop", ok: true, items: 2, ran_at: "2026-07-01T10:00:00.000Z" });
+    tables.sync_runs.seed({ user_id: userId, source: "whoop", ok: true, items: 3, ran_at: "2026-07-08T10:00:00.000Z" });
+    tables.sync_runs.seed({ user_id: userId, source: "whoop", ok: false, items: 0, ran_at: "2026-07-09T10:00:00.000Z" });
+    tables.sync_runs.seed({ user_id: userId, source: "strava", ok: true, items: 9, ran_at: "2026-07-09T09:00:00.000Z" });
+    const { fetchMock } = installWhoopFetchMock(whoopFixtures());
+
+    const result = await syncWhoop(admin, userId);
+    expect(result.ok).toBe(true);
+
+    const expectedSince = new Date(
+      new Date("2026-07-08T10:00:00.000Z").getTime() - WHOOP_SYNC_LOOKBACK_MS
+    ).toISOString();
+    expect(expectedSince).toBe("2026-07-01T10:00:00.000Z"); // 7 days, exactly
+    const urls = dataCallUrls(fetchMock);
+    expect(urls).toHaveLength(4); // recovery, sleep, cycle, workout
+    for (const url of urls) {
+      expect(url.searchParams.get("start")).toBe(expectedSince);
+    }
+  });
+
+  it("I5 first-ever sync (no ok row) stays full-history: no start param on any fetcher", async () => {
+    const { client: admin, tables } = createFakeAdmin();
+    getAdminClientMock.mockReturnValue(admin);
+    await seedConnectedUser(tables, userId);
+    tables.sync_runs.seed({ user_id: userId, source: "whoop", ok: false, items: 0, ran_at: "2026-07-09T10:00:00.000Z" });
+    const { fetchMock } = installWhoopFetchMock(whoopFixtures());
+
+    const result = await syncWhoop(admin, userId);
+    expect(result.ok).toBe(true);
+
+    const urls = dataCallUrls(fetchMock);
+    expect(urls).toHaveLength(4);
+    for (const url of urls) {
+      expect(url.searchParams.has("start")).toBe(false);
+    }
+  });
+
+  it("I5 an explicit opts.since wins over the stored anchor", async () => {
+    const { client: admin, tables } = createFakeAdmin();
+    getAdminClientMock.mockReturnValue(admin);
+    await seedConnectedUser(tables, userId);
+    tables.sync_runs.seed({ user_id: userId, source: "whoop", ok: true, items: 3, ran_at: "2026-07-08T10:00:00.000Z" });
+    const { fetchMock } = installWhoopFetchMock(whoopFixtures());
+
+    await syncWhoop(admin, userId, { since: new Date("2026-06-01T00:00:00.000Z") });
+
+    for (const url of dataCallUrls(fetchMock)) {
+      expect(url.searchParams.get("start")).toBe("2026-06-01T00:00:00.000Z");
+    }
   });
 
   it("a 401 on one data endpoint refreshes, PERSISTS the rotated tokens, retries once, and succeeds", async () => {

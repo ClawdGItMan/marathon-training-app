@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { findUserByAthleteRef, loadTokens } from "@/lib/integrations/oauth";
+import { errorMessage } from "@/lib/util/error-message";
 import { getActivity, type StravaAuthContext } from "@/lib/integrations/strava/client";
 import { importStravaActivity } from "@/lib/integrations/strava/sync";
 
@@ -116,8 +117,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     await logSyncRun(admin, userId, { ok: true, items: 1 });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    await logSyncRun(admin, userId, { ok: false, items: 0, detail });
+    // errorMessage (M1): supabase-js rejects with plain {message,...}
+    // objects, not Errors — the bare instanceof pattern wrote the useless
+    // "[object Object]" as the sync_runs detail for exactly those.
+    await logSyncRun(admin, userId, { ok: false, items: 0, detail: errorMessage(err) });
   }
 
   return ackOk();
