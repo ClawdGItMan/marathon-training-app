@@ -1,4 +1,5 @@
 import { RingGauge } from "@/components/charts/RingGauge";
+import { StaleMarker } from "@/components/sync/StaleMarker";
 import { recoveryBand } from "@/lib/format";
 import type { RecoverySnapshot } from "@/lib/domain/types";
 
@@ -35,6 +36,12 @@ export function ReadinessHero({ recovery }: { recovery: RecoverySnapshot }) {
         <div className="whitespace-nowrap font-mono text-[9.5px] tracking-[.16em] text-[#9aa0a7]">
           {recoveryBand(recovery.recoveryPct)} · {deltaLabel}
         </div>
+        {/* Task 12: this band/delta line is the closest thing this hero has
+            to a "section header" (RecoveryHero — Body's #7c twin — has none
+            either, per that component's own doc comment) — StaleMarker
+            renders directly under it, matching the brief's "under the
+            section header" placement in spirit. */}
+        <StaleMarker sourceKey="whoop" />
         {/* Guidance copy per #7c readiness hero (static seed-phase copy). */}
         <div className="mt-[7px] font-display text-[16px] leading-[1.3] text-white">
           Below your 30-day baseline.

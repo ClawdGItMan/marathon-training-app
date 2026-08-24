@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { CoachScreen } from "@/components/coach/CoachScreen";
 import { localRepo } from "@/lib/data/local-repo";
+import { OfflineError } from "@/lib/data/offline-cache";
 import { resolveCoachOrigin } from "@/lib/coach";
 
 beforeEach(() => localStorage.clear());
@@ -136,6 +137,47 @@ test("typing and sending appends a user message + fixed offline reply, persisted
   expect(thread.at(-2)?.role).toBe("user");
   expect(thread.at(-1)?.role).toBe("coach");
   expect(thread.at(-1)?.text).toBe("Noted — I'll factor that into your next few sessions.");
+});
+
+test("I4: a rejected send shows COULDN'T SAVE — TRY AGAIN with no unhandled rejection; retry success clears it", async () => {
+  const spy = vi.spyOn(localRepo, "appendChat").mockRejectedValueOnce(new Error("boom"));
+
+  render(<CoachScreen />);
+  await screen.findByText("Coach");
+
+  fireEvent.change(screen.getByPlaceholderText("ASK ANYTHING…"), {
+    target: { value: "did this save?" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+  expect(await screen.findByText("COULDN'T SAVE — TRY AGAIN")).toBeInTheDocument();
+
+  fireEvent.change(screen.getByPlaceholderText("ASK ANYTHING…"), {
+    target: { value: "did this save?" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+  expect(await screen.findByText("did this save?")).toBeInTheDocument();
+  expect(screen.queryByText("COULDN'T SAVE — TRY AGAIN")).not.toBeInTheDocument();
+
+  spy.mockRestore();
+});
+
+test("I4: a rejected proposal decide shows OFFLINE — TRY AGAIN; the box stays for the retry", async () => {
+  const spy = vi
+    .spyOn(localRepo, "decideProposal")
+    .mockRejectedValueOnce(new OfflineError("decideProposal: write failed"));
+
+  render(<CoachScreen />);
+  const accept = (await screen.findAllByRole("button", { name: "ACCEPT" }))[0];
+  fireEvent.click(accept);
+
+  expect(await screen.findByText("OFFLINE — TRY AGAIN")).toBeInTheDocument();
+
+  fireEvent.click((await screen.findAllByRole("button", { name: "ACCEPT" }))[0]);
+  await waitFor(() => expect(screen.queryByText("OFFLINE — TRY AGAIN")).not.toBeInTheDocument());
+
+  spy.mockRestore();
 });
 
 test("clicking a quick-prompt chip sends it as a user message and gets the fixed reply", async () => {

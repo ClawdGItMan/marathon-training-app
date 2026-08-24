@@ -2,11 +2,23 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { LogScreen } from "@/components/log/LogScreen";
 import { localRepo } from "@/lib/data/local-repo";
+import { OfflineError } from "@/lib/data/offline-cache";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
 }));
+
+// Task 12: see body.test.tsx's identical setup comment — default delegates
+// to the real (local-mode, no Supabase) getSyncStatus so every existing
+// test keeps its byte-identical local-mode rendering; only the dedicated
+// Task 12 test below overrides it.
+const { getSyncStatusMock } = vi.hoisted(() => ({ getSyncStatusMock: vi.fn() }));
+vi.mock("@/lib/sync/staleness", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/sync/staleness")>("@/lib/sync/staleness");
+  getSyncStatusMock.mockImplementation(actual.getSyncStatus);
+  return { ...actual, getSyncStatus: getSyncStatusMock };
+});
 
 beforeEach(() => {
   localStorage.clear();
@@ -29,6 +41,23 @@ test("Log screen shows the imported Strava run with no SYNCED badge", async () =
   expect(screen.getByText("9:36")).toBeInTheDocument();
 
   expect(screen.queryByText("SYNCED")).not.toBeInTheDocument();
+
+  // Task 12: local mode has no sync concept — the stale marker never
+  // renders, so this screen is byte-identical to pre-Task-12 local mode.
+  expect(screen.queryByText(/STALE —/)).not.toBeInTheDocument();
+});
+
+test("Task 12: shows the stale marker under AUTO-IMPORTED · STRAVA when strava hasn't synced within the 1h activities threshold", async () => {
+  const twoHoursAgo = new Date(Date.now() - 2 * 3600e3);
+  getSyncStatusMock.mockResolvedValueOnce({
+    whoop: { lastOkAt: new Date(), authBroken: false },
+    strava: { lastOkAt: twoHoursAgo, authBroken: false },
+  });
+
+  render(<LogScreen />);
+
+  await screen.findByText("AUTO-IMPORTED · STRAVA");
+  expect(await screen.findByText("STALE — LAST SYNCED 2H AGO")).toBeInTheDocument();
 });
 
 test("RPE defaults to 4/10 and tapping a segment updates the readout", async () => {
@@ -97,6 +126,38 @@ test("SAVE LOG with NONE selected omits pain fields but still logs the run", asy
   // no pain override was written for this save.
   const pains = await localRepo.getPains();
   expect(pains.find((p) => p.id === "achilles-l")!.severity).toBe(2);
+});
+
+test("I4: SAVE LOG rejection shows OFFLINE — TRY AGAIN, does not navigate; retry success clears it", async () => {
+  const spy = vi
+    .spyOn(localRepo, "logRun")
+    .mockRejectedValueOnce(new OfflineError("logRun: write failed"));
+
+  render(<LogScreen />);
+  fireEvent.click(await screen.findByRole("button", { name: "SAVE LOG" }));
+
+  expect(await screen.findByText("OFFLINE — TRY AGAIN")).toBeInTheDocument();
+  expect(push).not.toHaveBeenCalled();
+
+  // Retry: the once-rejection is consumed, the spy calls through to the
+  // real localRepo.logRun — success must clear the line and navigate.
+  fireEvent.click(screen.getByRole("button", { name: "SAVE LOG" }));
+  await waitFor(() => expect(push).toHaveBeenCalledWith("/today"));
+  expect(screen.queryByText("OFFLINE — TRY AGAIN")).not.toBeInTheDocument();
+
+  spy.mockRestore();
+});
+
+test("I4: a non-network write rejection shows COULDN'T SAVE — TRY AGAIN", async () => {
+  const spy = vi.spyOn(localRepo, "logRun").mockRejectedValueOnce(new Error("boom"));
+
+  render(<LogScreen />);
+  fireEvent.click(await screen.findByRole("button", { name: "SAVE LOG" }));
+
+  expect(await screen.findByText("COULDN'T SAVE — TRY AGAIN")).toBeInTheDocument();
+  expect(push).not.toHaveBeenCalled();
+
+  spy.mockRestore();
 });
 
 test("?focus=pain scrolls the pain section into view", async () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { localRepo } from "@/lib/data/local-repo";
+import { repo } from "@/lib/data";
 import type { PainArea, RecoverySnapshot } from "@/lib/domain/types";
 import { formatDayContext } from "@/lib/format";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -11,6 +11,7 @@ import { VitalsCard } from "@/components/body/VitalsCard";
 import { SleepCard } from "@/components/body/SleepCard";
 import { Recovery7dCard } from "@/components/body/Recovery7dCard";
 import { PainManagerCard } from "@/components/body/PainManagerCard";
+import { StaleMarker } from "@/components/sync/StaleMarker";
 
 type BodyState = {
   recovery: RecoverySnapshot;
@@ -20,9 +21,9 @@ type BodyState = {
 
 async function loadBodyState(): Promise<BodyState> {
   const [recovery, recovery7d, pains] = await Promise.all([
-    localRepo.getLatestRecovery(),
-    localRepo.getRecovery7d(),
-    localRepo.getPains(),
+    repo.getLatestRecovery(),
+    repo.getRecovery7d(),
+    repo.getPains(),
   ]);
 
   return { recovery, recovery7d, pains };
@@ -67,6 +68,7 @@ export function BodyScreen() {
 
       <div className="px-[22px] pt-[18px]">
         <Section header={{ label: "VITALS", context: "14 DAYS →" }}>
+          <StaleMarker sourceKey="whoop" />
           <VitalsCard
             hrv={recovery.hrv}
             hrvDeltaPct={recovery.hrvDeltaPct}

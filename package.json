@@ -1,5 +1,5 @@
 {
-  "name": "design_handoff_training_app",
+  "name": "marathon-training-app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -8,12 +8,22 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "db:start": "supabase start",
+    "db:reset": "supabase db reset",
+    "db:seed:gen": "tsx scripts/generate-supabase-seed.ts",
+    "strava:register-webhook": "tsx scripts/register-strava-webhook.ts",
+    "test:supabase": "vitest run --config vitest.supabase.config.ts",
+    "smoke:whoop": "NODE_OPTIONS=--conditions=react-server tsx scripts/smoke-whoop.ts",
+    "smoke:strava": "NODE_OPTIONS=--conditions=react-server tsx scripts/smoke-strava.ts"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.110.2",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "server-only": "^0.0.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -28,7 +38,9 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "jsdom": "^29.1.1",
+    "supabase": "^2.109.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.0",
     "typescript": "^5",
     "vitest": "^4.1.9"
   }

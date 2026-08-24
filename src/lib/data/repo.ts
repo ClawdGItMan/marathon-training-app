@@ -1,4 +1,5 @@
 import type {
+  Activity,
   ChatMessage,
   PainArea,
   PlannedSession,
@@ -56,4 +57,8 @@ export interface Repo {
   getCoachThread(): Promise<ChatMessage[]>;
   appendChat(msg: ChatMessage): Promise<void>;
   logRun(entry: LogRunEntry): Promise<void>;
+  /** Log screen's AUTO-IMPORTED · STRAVA card (Task 11) — most recent imported run, or null if none exists yet. */
+  getLatestActivity(): Promise<Activity | null>;
+  /** Progress screen's THIS WEEK · RUN mileage chart (Task 11) — 12 weekly mileage totals, oldest first. */
+  getMileage12wk(): Promise<number[]>;
 }

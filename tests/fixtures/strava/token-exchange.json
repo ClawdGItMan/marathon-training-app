@@ -1,0 +1,14 @@
+{
+  "token_type": "Bearer",
+  "access_token": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+  "refresh_token": "f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5",
+  "expires_at": 1783742400,
+  "expires_in": 21600,
+  "athlete": {
+    "id": 10129358,
+    "resource_state": 2,
+    "firstname": "Max",
+    "lastname": "A"
+  },
+  "scope": "read,activity:read_all"
+}

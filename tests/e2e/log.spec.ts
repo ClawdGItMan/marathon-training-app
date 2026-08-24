@@ -15,6 +15,10 @@ test.describe("Log screen (design #7d)", () => {
       "true"
     );
     await expect(page.getByText("SYNCED")).toHaveCount(0);
+
+    // Task 12: local mode has no sync concept — the imported-run section's
+    // stale marker must never render here.
+    await expect(page.getByText(/STALE —/)).toHaveCount(0);
   });
 
   test("SAVE LOG writes the run + pain to the repo and redirects to /today", async ({ page }) => {

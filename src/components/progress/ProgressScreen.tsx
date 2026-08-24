@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { localRepo } from "@/lib/data/local-repo";
-import { seed } from "@/lib/data/seed";
+import { repo } from "@/lib/data";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { StreakIndicator } from "@/components/progress/StreakIndicator";
@@ -10,7 +9,7 @@ import { RangeTabs, type Range } from "@/components/progress/RangeTabs";
 import { FocusCard } from "@/components/progress/FocusCard";
 import { WeekRunCard } from "@/components/progress/WeekRunCard";
 import { PredictionsCard } from "@/components/progress/PredictionsCard";
-import type { Prediction, RaceGoal } from "@/lib/domain/types";
+import type { Prediction, RaceGoal, TrainingBlock } from "@/lib/domain/types";
 
 const X_LABELS: Record<Range, string[]> = {
   "1W": ["THIS WK"],
@@ -33,21 +32,20 @@ function sliceMileage(mileage12wk: number[], range: Range): number[] {
 
 type ProgressState = {
   goal: RaceGoal;
+  block: TrainingBlock;
   predictions: Prediction[];
   mileage12wk: number[];
 };
 
 async function loadProgressState(): Promise<ProgressState> {
-  const [goal, predictions] = await Promise.all([
-    localRepo.getGoal(),
-    localRepo.getPredictions(),
+  const [goal, block, predictions, mileage12wk] = await Promise.all([
+    repo.getGoal(),
+    repo.getBlock(),
+    repo.getPredictions(),
+    repo.getMileage12wk(),
   ]);
 
-  return {
-    goal,
-    predictions,
-    mileage12wk: seed.mileage12wk,
-  };
+  return { goal, block, predictions, mileage12wk };
 }
 
 export function ProgressScreen() {
@@ -68,7 +66,7 @@ export function ProgressScreen() {
 
   if (!state) return null;
 
-  const { goal, predictions, mileage12wk } = state;
+  const { goal, block, predictions, mileage12wk } = state;
   const weekMileage = sliceMileage(mileage12wk, selectedRange);
   const xLabels = X_LABELS[selectedRange];
 
@@ -79,7 +77,7 @@ export function ProgressScreen() {
       <RangeTabs value={selectedRange} onChange={setSelectedRange} />
 
       <div className="px-[22px] pt-[18px]">
-        <FocusCard goal={goal} />
+        <FocusCard goal={goal} block={block} />
       </div>
 
       <div className="px-[22px] pt-[18px]">

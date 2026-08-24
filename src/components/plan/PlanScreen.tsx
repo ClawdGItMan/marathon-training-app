@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { localRepo } from "@/lib/data/local-repo";
+import { repo } from "@/lib/data";
 import type { StrengthSession } from "@/lib/data/repo";
 import { seed } from "@/lib/data/seed";
+import { resolveTodaySessionId } from "@/lib/data/today";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { UnderlineTabs } from "@/components/ui/UnderlineTabs";
 import { RunTab } from "@/components/plan/RunTab";
@@ -22,9 +23,9 @@ type PlanState = {
 
 async function loadPlanState(): Promise<PlanState> {
   const [block, week, strength] = await Promise.all([
-    localRepo.getBlock(),
-    localRepo.getWeekSessions(),
-    localRepo.getStrengthSession(),
+    repo.getBlock(),
+    repo.getWeekSessions(),
+    repo.getStrengthSession(),
   ]);
   return { block, week, strength };
 }
@@ -65,7 +66,10 @@ export function PlanScreen() {
           block={block}
           periodization={seed.periodization}
           week={week}
-          todaySessionId={seed.todaySessionId}
+          // I2: the lime row is strictly "now" — resolve today by date (home
+          // tz), falling back to the static seed id in local mode's frozen
+          // demo week (see src/lib/data/today.ts).
+          todaySessionId={resolveTodaySessionId(week, new Date())}
         />
       ) : (
         <StrengthTab strength={strength} />

@@ -3,6 +3,13 @@
 .tmp/
 node_modules/
 .env*
+!.env.example
+
+# supabase local stack
+supabase/.temp
+
+# cloud bootstrap output (real owner uuid/email — regenerate, don't commit)
+supabase/seed.cloud.sql
 
 # dependencies
 /.pnp

@@ -1,5 +1,6 @@
 import { Section } from "@/components/ui/Section";
 import { StatGrid } from "@/components/ui/StatGrid";
+import { StaleMarker } from "@/components/sync/StaleMarker";
 import { formatActivityTitle, formatMinSec, formatPace } from "@/lib/format";
 import type { Activity } from "@/lib/domain/types";
 
@@ -13,6 +14,7 @@ import type { Activity } from "@/lib/domain/types";
 export function ImportedRunSection({ activity }: { activity: Activity }) {
   return (
     <Section header={{ label: "AUTO-IMPORTED · STRAVA" }}>
+      <StaleMarker sourceKey="strava" />
       <div className="mt-[10px] font-display text-[20px] text-white">
         {formatActivityTitle(activity.title)}
       </div>

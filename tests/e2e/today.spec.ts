@@ -69,4 +69,15 @@ test.describe("Today screen — recommendation decisions", () => {
     await page.reload();
     await expect(page.getByText("Easy shakeout")).toBeVisible();
   });
+
+  // Task 12: local mode has no sync concept — getSyncStatus() returns
+  // all-fresh without touching Supabase (src/lib/sync/staleness.ts), so the
+  // readiness hero's stale marker must never render here. Screens change
+  // zero pixels except the marker line itself.
+  test("never shows the stale marker in local mode", async ({ page }) => {
+    await page.goto("/today");
+
+    await expect(page.getByText("READY")).toBeVisible();
+    await expect(page.getByText(/STALE —/)).toHaveCount(0);
+  });
 });
