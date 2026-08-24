@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AskCoachChip } from "@/components/shell/AskCoachChip";
+import { DemoBadge } from "@/components/shell/DemoBadge";
 
 export function PageHeader({
   title,
@@ -25,6 +26,7 @@ export function PageHeader({
         ) : null}
       </div>
       <div className="flex items-center gap-[14px]">
+        <DemoBadge />
         {right}
         <AskCoachChip from={from} />
       </div>
