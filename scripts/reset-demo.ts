@@ -26,6 +26,16 @@ async function main(): Promise<void> {
   }
   const env = parsed.data;
 
+  if (
+    process.env.ALLOWED_EMAIL &&
+    env.DEMO_USER_EMAIL.trim().toLowerCase() === process.env.ALLOWED_EMAIL.trim().toLowerCase()
+  ) {
+    console.error(
+      "demo:reset refused: DEMO_USER_EMAIL equals ALLOWED_EMAIL — this would wipe and reseed the OWNER's data.",
+    );
+    process.exit(1);
+  }
+
   const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
