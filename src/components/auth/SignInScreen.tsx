@@ -24,8 +24,12 @@ const ctaClass =
  */
 export function SignInScreen({
   checkAllowedEmail,
+  demoEnabled = false,
+  signInAsDemo,
 }: {
   checkAllowedEmail: (email: string) => Promise<boolean>;
+  demoEnabled?: boolean;
+  signInAsDemo?: () => Promise<{ error: string } | void>;
 }) {
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
@@ -86,6 +90,25 @@ export function SignInScreen({
     }
   }
 
+  async function handleDemo() {
+    if (!signInAsDemo) return;
+    setError(null);
+    setPending(true);
+    try {
+      const result = await signInAsDemo();
+      if (result?.error) setError(result.error);
+    } catch (err) {
+      // next/navigation redirect() throws a control-flow error with a
+      // NEXT_REDIRECT digest — that's success (navigation), not failure.
+      if (err instanceof Error && "digest" in err && String((err as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")) {
+        return;
+      }
+      setError("DEMO SIGN-IN FAILED — TRY AGAIN");
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[414px] flex-col justify-center px-[22px]">
       <span className={labelClass}>SIGN IN</span>
@@ -114,6 +137,15 @@ export function SignInScreen({
           >
             SEND CODE
           </button>
+          {demoEnabled ? (
+            <button
+              onClick={handleDemo}
+              disabled={pending}
+              className="mt-[10px] h-[50px] w-full rounded-[2px] border border-[#2a2d31] font-display text-[13px] font-semibold uppercase tracking-[.06em] text-ink-2 disabled:opacity-50"
+            >
+              VIEW DEMO
+            </button>
+          ) : null}
         </div>
       ) : (
         <div className="mt-[28px]">

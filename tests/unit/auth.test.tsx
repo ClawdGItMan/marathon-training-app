@@ -113,4 +113,35 @@ describe("SignInScreen", () => {
     expect(await screen.findByText("NOT AUTHORIZED FOR THIS APP")).toBeInTheDocument();
     expect(signInWithOtp).not.toHaveBeenCalled();
   });
+
+  test("no VIEW DEMO button when demo is not enabled", () => {
+    render(<SignInScreen checkAllowedEmail={vi.fn().mockResolvedValue(true)} />);
+    expect(screen.queryByRole("button", { name: "VIEW DEMO" })).not.toBeInTheDocument();
+  });
+
+  test("VIEW DEMO button calls signInAsDemo when enabled", async () => {
+    const signInAsDemo = vi.fn().mockResolvedValue(undefined);
+    render(
+      <SignInScreen
+        checkAllowedEmail={vi.fn().mockResolvedValue(true)}
+        demoEnabled
+        signInAsDemo={signInAsDemo}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "VIEW DEMO" }));
+    await waitFor(() => expect(signInAsDemo).toHaveBeenCalledTimes(1));
+  });
+
+  test("VIEW DEMO shows the action's error inline on failure", async () => {
+    const signInAsDemo = vi.fn().mockResolvedValue({ error: "DEMO SIGN-IN FAILED — TRY AGAIN" });
+    render(
+      <SignInScreen
+        checkAllowedEmail={vi.fn().mockResolvedValue(true)}
+        demoEnabled
+        signInAsDemo={signInAsDemo}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "VIEW DEMO" }));
+    expect(await screen.findByText("DEMO SIGN-IN FAILED — TRY AGAIN")).toBeInTheDocument();
+  });
 });
