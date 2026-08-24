@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { isAllowedEmail } from "@/lib/auth/allowlist";
+import { isAllowedEmail, isDemoEmail } from "@/lib/auth/allowlist";
 import { SignInScreen } from "@/components/auth/SignInScreen";
 
 afterEach(cleanup);
@@ -32,6 +32,34 @@ describe("isAllowedEmail", () => {
   test("rejects when ALLOWED_EMAIL is unset", () => {
     vi.stubEnv("ALLOWED_EMAIL", "");
     expect(isAllowedEmail("max.allaire@gmail.com")).toBe(false);
+  });
+
+  test("accepts the demo email when DEMO_USER_EMAIL is set", () => {
+    vi.stubEnv("DEMO_USER_EMAIL", "demo@marathon.invalid");
+    expect(isAllowedEmail("  Demo@Marathon.INVALID ")).toBe(true);
+  });
+
+  test("rejects the demo email when DEMO_USER_EMAIL is unset", () => {
+    vi.stubEnv("DEMO_USER_EMAIL", "");
+    expect(isAllowedEmail("demo@marathon.invalid")).toBe(false);
+  });
+});
+
+describe("isDemoEmail", () => {
+  test("matches DEMO_USER_EMAIL case-insensitively, trimmed", () => {
+    vi.stubEnv("DEMO_USER_EMAIL", "demo@marathon.invalid");
+    expect(isDemoEmail("  Demo@Marathon.INVALID ")).toBe(true);
+  });
+
+  test("never matches the owner email", () => {
+    vi.stubEnv("DEMO_USER_EMAIL", "demo@marathon.invalid");
+    expect(isDemoEmail("max.allaire@gmail.com")).toBe(false);
+  });
+
+  test("matches nothing when DEMO_USER_EMAIL is unset", () => {
+    vi.stubEnv("DEMO_USER_EMAIL", "");
+    expect(isDemoEmail("demo@marathon.invalid")).toBe(false);
+    expect(isDemoEmail("")).toBe(false);
   });
 });
 
