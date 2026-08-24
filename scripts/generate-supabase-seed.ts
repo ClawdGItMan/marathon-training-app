@@ -51,7 +51,16 @@ import { TEST_USER_ID, TEST_USER_EMAIL, TEST_USER_PASSWORD } from "../tests/pari
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { toChatMessageRow, toPainAreaRow, toPlannedSessionRow, toProposalRow } from "./lib/seed-rows";
+import {
+  toActivityRow,
+  toBlockRow,
+  toChatMessageRow,
+  toGoalRow,
+  toPainAreaRow,
+  toPlannedSessionRow,
+  toProposalRow,
+  toRecoverySnapshotRow,
+} from "./lib/seed-rows";
 
 // ---- seed user resolution (C1: real-user bootstrap) -------------------------
 // The deployed app's bootstrap problem: a first OTP sign-in creates ONLY an
@@ -194,21 +203,18 @@ insert into auth.identities (
   // ---- goals ------------------------------------------------------------------
   // predictedSec/daysOut/streak have no dedicated column -> payload (0002).
 
+  const goalRow = toGoalRow(seed.goal, userId);
   const goalsSql = insert(
     "public.goals",
     ["id", "user_id", "name", "date", "target_seconds", "payload"],
     [
       [
-        sqlStr("goal-1"),
-        sqlStr(userId),
-        sqlStr(seed.goal.name),
-        sqlStr(seed.goal.date),
-        sqlNum(seed.goal.goalSec),
-        sqlJson({
-          predictedSec: seed.goal.predictedSec,
-          daysOut: seed.goal.daysOut,
-          streak: seed.goal.streak,
-        }),
+        sqlStr(goalRow.id),
+        sqlStr(goalRow.user_id),
+        sqlStr(goalRow.name),
+        sqlStr(goalRow.date),
+        sqlNum(goalRow.target_seconds),
+        sqlJson(goalRow.payload),
       ],
     ]
   );
@@ -219,23 +225,20 @@ insert into auth.identities (
   // the table offers); `periodization` is the seed's top-level 16-week
   // bar-chart array, stored per-block since that's where the DDL puts it.
 
+  const blockRow = toBlockRow(seed.block, seed.periodization, userId);
   const blocksSql = insert(
     "public.blocks",
     ["id", "user_id", "label", "phase", "week", "total_weeks", "periodization", "payload"],
     [
       [
-        sqlStr("block-1"),
-        sqlStr(userId),
-        sqlStr(seed.block.longRunLabel),
-        sqlStr(seed.block.phase),
-        sqlNum(seed.block.week),
-        sqlNum(seed.block.totalWeeks),
-        sqlJson(seed.periodization),
-        sqlJson({
-          number: seed.block.number,
-          weekMilesDone: seed.block.weekMilesDone,
-          weekMilesTarget: seed.block.weekMilesTarget,
-        }),
+        sqlStr(blockRow.id),
+        sqlStr(blockRow.user_id),
+        sqlStr(blockRow.label),
+        sqlStr(blockRow.phase),
+        sqlNum(blockRow.week),
+        sqlNum(blockRow.total_weeks),
+        sqlJson(blockRow.periodization),
+        sqlJson(blockRow.payload),
       ],
     ]
   );
@@ -313,22 +316,20 @@ insert into auth.identities (
   const recoverySnapshotsSql = insert(
     "public.recovery_snapshots",
     ["user_id", "day", "recovery_pct", "hrv_ms", "rhr", "day_strain", "sleep", "source", "payload"],
-    seed.recovery.map((snapshot) => [
-      sqlStr(userId),
-      sqlStr(snapshot.date),
-      sqlNum(snapshot.recoveryPct),
-      sqlNum(snapshot.hrv),
-      sqlNum(snapshot.rhr),
-      sqlNum(snapshot.load),
-      sqlJson({ ...snapshot.sleep, respRate: snapshot.respRate }),
-      sqlStr("whoop"),
-      sqlJson({
-        recoveryDelta: snapshot.recoveryDelta,
-        hrvDeltaPct: snapshot.hrvDeltaPct,
-        rhrDelta: snapshot.rhrDelta,
-        loadLabel: snapshot.loadLabel,
-      }),
-    ])
+    seed.recovery.map((snapshot) => {
+      const row = toRecoverySnapshotRow(snapshot, userId);
+      return [
+        sqlStr(row.user_id),
+        sqlStr(row.day),
+        sqlNum(row.recovery_pct),
+        sqlNum(row.hrv_ms),
+        sqlNum(row.rhr),
+        sqlNum(row.day_strain),
+        sqlJson(row.sleep),
+        sqlStr(row.source),
+        sqlJson(row.payload),
+      ];
+    })
   );
 
   // ---- activities ---------------------------------------------------------
@@ -348,16 +349,16 @@ insert into auth.identities (
       "payload",
     ],
     seed.activities.map((activity) => {
-      const startedAt = `${activity.date}T00:00:00Z`;
+      const row = toActivityRow(activity, userId);
       return [
-        sqlStr(userId),
-        sqlStr("run"),
-        sqlStr(startedAt),
-        `(${sqlStr(startedAt)}::timestamptz + make_interval(secs => ${sqlNum(activity.timeSec)}))`,
-        sqlNum(activity.distanceMi * 1609.344),
-        sqlNum(activity.timeSec),
-        sqlNum(activity.paceSecPerMi),
-        sqlJson({ id: activity.id, title: activity.title, synced: activity.synced }),
+        sqlStr(row.user_id),
+        sqlStr(row.sport),
+        sqlStr(row.started_at),
+        `${sqlStr(row.ended_at)}::timestamptz`,
+        sqlNum(row.distance_m),
+        sqlNum(row.moving_sec),
+        sqlNum(row.avg_pace_sec_per_mi),
+        sqlJson(row.payload),
       ];
     })
   );

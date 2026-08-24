@@ -74,7 +74,7 @@ insert into public.recovery_snapshots (user_id, day, recovery_pct, hrv_ms, rhr, 
   ('00000000-0000-0000-0000-000000000001', '2026-07-01', 62, 48, 52, 1.28, '{"durationMin":372,"needMin":464,"efficiencyPct":88,"sleepScorePct":78,"deepMin":67,"remMin":85,"lightMin":188,"respRate":14.2}'::jsonb, 'whoop', '{"recoveryDelta":-9,"hrvDeltaPct":-12,"rhrDelta":3,"loadLabel":"elevated"}'::jsonb);
 
 insert into public.activities (user_id, sport, started_at, ended_at, distance_m, moving_sec, avg_pace_sec_per_mi, payload) values
-  ('00000000-0000-0000-0000-000000000001', 'run', '2026-06-29T00:00:00Z', ('2026-06-29T00:00:00Z'::timestamptz + make_interval(secs => 2304)), 6437.376, 2304, 576, '{"id":"act-1","title":"Easy run · 4 mi","synced":true}'::jsonb);
+  ('00000000-0000-0000-0000-000000000001', 'run', '2026-06-29T00:00:00Z', '2026-06-29T00:38:24.000Z'::timestamptz, 6437.376, 2304, 576, '{"id":"act-1","title":"Easy run · 4 mi","synced":true}'::jsonb);
 
 insert into public.chat_messages (id, user_id, role, body, time_label, proposal_refs, seq, payload) values
   ('msg-0', '00000000-0000-0000-0000-000000000001', 'coach', 'Morning briefing: rain''s forecast for Sunday, so here''s one open proposal for this week before we get going.', '6:41', '["proposal-2"]'::jsonb, 0, '{}'::jsonb),

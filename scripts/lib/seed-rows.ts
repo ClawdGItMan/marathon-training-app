@@ -1,9 +1,7 @@
 /**
- * Shared row-shape builders for the four tables that BOTH
- * scripts/generate-supabase-seed.ts (supabase/seed.sql, one-time SQL text)
- * and tests/parity/reset-supabase-seed.ts (per-test fast reset, supabase-js
- * `.insert()` rows) construct from the Phase-1 TypeScript seed object
- * (src/lib/data/seed.ts).
+ * Shared row-shape builders for the eight tables that scripts/generate-supabase-seed.ts
+ * (supabase/seed.sql, one-time SQL text) and one or more supabase-js call
+ * sites construct from the Phase-1 TypeScript seed object (src/lib/data/seed.ts).
  *
  * Node-side only (no DOM/browser APIs) — deliberately placed outside src/
  * so it can never end up in the Next.js client bundle, even accidentally
@@ -15,12 +13,23 @@
  * *order* and wire-format (SQL literal text vs. supabase-js object) stay
  * with each call site — only the data-shape/derivation logic is shared.
  *
- * goals/blocks/recovery_snapshots/activities are only ever built by the
- * generator (reset-supabase-seed.ts never mutates them — see that file's
- * top comment), so they have no shared builder here.
+ * planned_sessions/proposals/pain_areas/chat_messages have two call sites
+ * today: scripts/generate-supabase-seed.ts and
+ * tests/parity/reset-supabase-seed.ts (per-test fast reset).
+ *
+ * goals/blocks/recovery_snapshots/activities were generator-only until now
+ * — scripts/lib/demo-reset.ts is their second call site (a supabase-js demo
+ * reset), which is exactly the drift condition this file exists to prevent.
  */
 
-import type { ChatMessage, PainArea, PlannedSession, Proposal } from "../../src/lib/domain/types";
+import type {
+  Activity,
+  ChatMessage,
+  PainArea,
+  PlannedSession,
+  Proposal,
+  Seed,
+} from "../../src/lib/domain/types";
 
 export interface PlannedSessionRow {
   id: string;
@@ -143,5 +152,154 @@ export function toChatMessageRow(message: ChatMessage, index: number, userId: st
     proposal_refs: message.proposalRefs ?? null,
     seq: index,
     payload: {},
+  };
+}
+
+export interface GoalRow {
+  id: string;
+  user_id: string;
+  name: string;
+  date: string;
+  target_seconds: number;
+  payload: {
+    predictedSec: Seed["goal"]["predictedSec"];
+    daysOut: Seed["goal"]["daysOut"];
+    streak: Seed["goal"]["streak"];
+  };
+}
+
+// predictedSec/daysOut/streak have no dedicated column -> payload (see
+// scripts/generate-supabase-seed.ts's "goals" section for the full note).
+export function toGoalRow(goal: Seed["goal"], userId: string): GoalRow {
+  return {
+    id: "goal-1",
+    user_id: userId,
+    name: goal.name,
+    date: goal.date,
+    target_seconds: goal.goalSec,
+    payload: {
+      predictedSec: goal.predictedSec,
+      daysOut: goal.daysOut,
+      streak: goal.streak,
+    },
+  };
+}
+
+export interface BlockRow {
+  id: string;
+  user_id: string;
+  label: string;
+  phase: Seed["block"]["phase"];
+  week: number;
+  total_weeks: number;
+  periodization: Seed["periodization"];
+  payload: {
+    number: Seed["block"]["number"];
+    weekMilesDone: Seed["block"]["weekMilesDone"];
+    weekMilesTarget: Seed["block"]["weekMilesTarget"];
+  };
+}
+
+// number/weekMilesDone/weekMilesTarget have no dedicated column -> payload;
+// `label` holds the block's long-run label; `periodization` is the seed's
+// top-level 16-week bar-chart array, stored per-block since that's where the
+// DDL puts it (see scripts/generate-supabase-seed.ts's "blocks" section).
+export function toBlockRow(
+  block: Seed["block"],
+  periodization: Seed["periodization"],
+  userId: string
+): BlockRow {
+  return {
+    id: "block-1",
+    user_id: userId,
+    label: block.longRunLabel,
+    phase: block.phase,
+    week: block.week,
+    total_weeks: block.totalWeeks,
+    periodization,
+    payload: {
+      number: block.number,
+      weekMilesDone: block.weekMilesDone,
+      weekMilesTarget: block.weekMilesTarget,
+    },
+  };
+}
+
+export interface RecoverySnapshotRow {
+  user_id: string;
+  day: string;
+  recovery_pct: number;
+  hrv_ms: number;
+  rhr: number;
+  day_strain: number;
+  sleep: Seed["recovery"][number]["sleep"] & { respRate: Seed["recovery"][number]["respRate"] };
+  source: "whoop";
+  payload: {
+    recoveryDelta: Seed["recovery"][number]["recoveryDelta"];
+    hrvDeltaPct: Seed["recovery"][number]["hrvDeltaPct"];
+    rhrDelta: Seed["recovery"][number]["rhrDelta"];
+    loadLabel: Seed["recovery"][number]["loadLabel"];
+  };
+}
+
+// recoveryDelta/hrvDeltaPct/rhrDelta/loadLabel have no dedicated column ->
+// payload. respRate has no dedicated column or its own payload slot on this
+// table, so it stays folded into the `sleep` jsonb blob rather than dropped
+// (see scripts/generate-supabase-seed.ts's "recovery_snapshots" section).
+export function toRecoverySnapshotRow(
+  snapshot: Seed["recovery"][number],
+  userId: string
+): RecoverySnapshotRow {
+  return {
+    user_id: userId,
+    day: snapshot.date,
+    recovery_pct: snapshot.recoveryPct,
+    hrv_ms: snapshot.hrv,
+    rhr: snapshot.rhr,
+    day_strain: snapshot.load,
+    sleep: { ...snapshot.sleep, respRate: snapshot.respRate },
+    source: "whoop",
+    payload: {
+      recoveryDelta: snapshot.recoveryDelta,
+      hrvDeltaPct: snapshot.hrvDeltaPct,
+      rhrDelta: snapshot.rhrDelta,
+      loadLabel: snapshot.loadLabel,
+    },
+  };
+}
+
+export interface ActivityRow {
+  user_id: string;
+  sport: "run";
+  started_at: string;
+  ended_at: string;
+  distance_m: number;
+  moving_sec: Activity["timeSec"];
+  avg_pace_sec_per_mi: Activity["paceSecPerMi"];
+  payload: {
+    id: Activity["id"];
+    title: Activity["title"];
+    synced: Activity["synced"];
+  };
+}
+
+// Seed activities predate Strava/Whoop ids; the original string id, title,
+// and synced flag have no dedicated column, so they go into payload (see
+// scripts/generate-supabase-seed.ts's "activities" section).
+export function toActivityRow(activity: Seed["activities"][number], userId: string): ActivityRow {
+  const startedAt = `${activity.date}T00:00:00Z`;
+  return {
+    user_id: userId,
+    sport: "run",
+    started_at: startedAt,
+    ended_at: new Date(Date.parse(startedAt) + activity.timeSec * 1000).toISOString(),
+    distance_m: activity.distanceMi * 1609.344,
+    moving_sec: activity.timeSec,
+    avg_pace_sec_per_mi: activity.paceSecPerMi,
+    payload: {
+      id: activity.id,
+      title: activity.title,
+      synced: activity.synced,
+    },
   };
 }
