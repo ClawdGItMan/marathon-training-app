@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { isAllowedEmail } from "@/lib/auth/allowlist";
+import { getServerClient } from "@/lib/supabase/server";
 import { SignInScreen } from "@/components/auth/SignInScreen";
 
 /**
@@ -13,6 +15,38 @@ async function checkAllowedEmail(email: string): Promise<boolean> {
   return isAllowedEmail(email);
 }
 
+/**
+ * One-click demo sign-in (public portfolio path — see
+ * docs/superpowers/specs/2026-08-24-public-demo-access-design.md).
+ * Credentials are fixed server-side env values; no client input reaches
+ * this grant, so the action can only ever sign into the demo account.
+ * Success redirects (never returns); failure returns the calm inline
+ * error shape SignInScreen already renders.
+ */
+async function signInAsDemo(): Promise<{ error: string } | void> {
+  "use server";
+  const email = process.env.DEMO_USER_EMAIL;
+  const password = process.env.DEMO_USER_PASSWORD;
+  if (!email || !password) {
+    return { error: "DEMO SIGN-IN FAILED — TRY AGAIN" };
+  }
+  try {
+    const supabase = await getServerClient();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { error: "DEMO SIGN-IN FAILED — TRY AGAIN" };
+  } catch {
+    return { error: "DEMO SIGN-IN FAILED — TRY AGAIN" };
+  }
+  redirect("/today");
+}
+
 export default function SignInPage() {
-  return <SignInScreen checkAllowedEmail={checkAllowedEmail} />;
+  const demoEnabled = Boolean(process.env.DEMO_USER_EMAIL && process.env.DEMO_USER_PASSWORD);
+  return (
+    <SignInScreen
+      checkAllowedEmail={checkAllowedEmail}
+      demoEnabled={demoEnabled}
+      signInAsDemo={demoEnabled ? signInAsDemo : undefined}
+    />
+  );
 }

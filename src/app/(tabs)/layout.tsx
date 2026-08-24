@@ -1,36 +1,28 @@
-"use client";
-
-import { useEffect } from "react";
-import { AppShell } from "@/components/shell/AppShell";
-import { refreshIfStale } from "@/lib/sync/run";
-import { registerServiceWorker } from "@/lib/sw/register";
+import { isDemoEmail } from "@/lib/auth/allowlist";
+import { getServerClient } from "@/lib/supabase/server";
+import { TabsShell } from "@/components/shell/TabsShell";
 
 /**
- * On-open staleness refresh (Task 9). Fires `refreshIfStale` once per app
- * mount, supabase mode only — in local mode (`NEXT_PUBLIC_REPO_MODE` unset
- * or "local", the Phase-1 default) the effect returns before even calling
- * the server action, so local mode/e2e is a hard zero-behavior-change:
- * `refreshIfStale` is never invoked, no extra network round trip, no
- * rendered pixel differs.
- *
- * Fire-and-forget (`void`, not awaited) — this is a background refresh, not
- * a data dependency for first paint; `refreshIfStale` itself swallows all
- * errors and resolves void either way (see src/lib/sync/run.ts), so there's
- * nothing here to catch.
+ * Server Component so the demo badge can be detected from the session
+ * server-side (the demo email env var must never reach the client bundle —
+ * only this boolean does). Local mode short-circuits before touching
+ * Supabase at all: no env, no client, zero behavior change for the Phase-1
+ * e2e baseline.
  */
-export default function TabsLayout({ children }: { children: React.ReactNode }) {
-  useEffect(() => {
-    if (process.env.NEXT_PUBLIC_REPO_MODE !== "supabase") return;
-    void refreshIfStale();
-  }, []);
-
-  // I6: app-shell service worker, BOTH repo modes (the SW caches the shell,
-  // not data). Deliberately a separate effect from the mode-gated refresh
-  // above; the registration helper itself is production-gated and
-  // never throws (see src/lib/sw/register.ts).
-  useEffect(() => {
-    registerServiceWorker();
-  }, []);
-
-  return <AppShell>{children}</AppShell>;
+export default async function TabsLayout({ children }: { children: React.ReactNode }) {
+  let isDemo = false;
+  if (process.env.NEXT_PUBLIC_REPO_MODE === "supabase") {
+    try {
+      const supabase = await getServerClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      isDemo = isDemoEmail(user?.email ?? "");
+    } catch {
+      // Session lookup failing must never take down the shell — a non-demo
+      // render is the safe fallback.
+      isDemo = false;
+    }
+  }
+  return <TabsShell isDemo={isDemo}>{children}</TabsShell>;
 }

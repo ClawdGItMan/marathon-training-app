@@ -64,6 +64,17 @@ Signing in does **not** create a `profiles` row — an OTP sign-in creates only 
 
 Without step 4–5, a signed-in owner sees a blank app (`getGoal` finds no row) and the OAuth connect flows fail (`integration_tokens` has a foreign key to `profiles`).
 
+**Public demo (optional, portfolio deploys)** — set `DEMO_USER_EMAIL` +
+`DEMO_USER_PASSWORD` (see `.env.example`) and run `npm run demo:reset` once
+against the deployed project's env: it creates the demo auth user (or syncs
+its password) and loads the full demo dataset under that account. The
+sign-in screen then shows a **VIEW DEMO** button that signs visitors into
+that account server-side — fully interactive, RLS-scoped to the demo rows
+only. Re-run `npm run demo:reset` anytime to wipe visitor drift back to the
+clean seed. Unset the two env vars to remove the button entirely (owner-only
+behavior, byte-identical to pre-demo builds). Design:
+`docs/superpowers/specs/2026-08-24-public-demo-access-design.md`.
+
 **Cron** — `src/app/api/cron/morning/route.ts`, scheduled hourly (`vercel.json`: `0 * * * *`), not once daily at a fixed UTC hour: a UTC-fixed schedule would drift against the profile's home timezone across DST. The route runs every hour and no-ops for a profile unless that profile's LOCAL hour is exactly 6am — the trigger stays pinned to "6am local" year-round while the UTC instant it corresponds to shifts underneath it twice a year.
 
 **Offline shell (service worker)** — `public/sw.js`, registered from the app shell (`src/app/(tabs)/layout.tsx` → `src/lib/sw/register.ts`) in **production builds only**: `next dev` serves JS chunks at stable paths whose contents change on recompile, so the worker's cache-first strategy would serve stale code in dev (this gate is also why the e2e suites, which run against `next dev`, are untouched by it). Strategy: cache-first for `/_next/static/*` + `/icons/*`, network-first with cache fallback for page navigations, and no interception of `/api/*` or any cross-origin (Supabase/provider) request — the app-layer offline cache (`src/lib/data/offline-cache.ts`) owns data. Unit tests cover only the registration gating; the real offline cold-open verification is the ⚑ phone checkpoint (deploy, open the app once, airplane-mode it, reopen — the shell should render with last-known data).

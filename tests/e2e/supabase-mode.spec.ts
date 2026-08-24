@@ -42,4 +42,13 @@ test.describe("supabase mode smoke", () => {
     // ReadinessHero's ring label.
     await expect(page.getByText("62", { exact: true })).toBeVisible();
   });
+
+  test("sign-in screen hides VIEW DEMO when demo env is not configured", async ({ page }) => {
+    // This harness never sets DEMO_USER_EMAIL/PASSWORD — the button must be
+    // absent, which is also the guarantee that keeps the Phase-1 local-mode
+    // baseline and any non-demo deploy pixel-identical.
+    await page.goto("/sign-in");
+    await expect(page.getByRole("button", { name: "SEND CODE" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "VIEW DEMO" })).toHaveCount(0);
+  });
 });

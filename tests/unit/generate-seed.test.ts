@@ -5,6 +5,7 @@ import {
   resolveSeedUser,
 } from "../../scripts/generate-supabase-seed";
 import { buildReanchorUpdateSql, reanchorPlan } from "../../scripts/reanchor-plan";
+import { toActivityRow, toBlockRow, toGoalRow, toRecoverySnapshotRow } from "../../scripts/lib/seed-rows";
 import { seed } from "../../src/lib/data/seed";
 import { TEST_USER_EMAIL, TEST_USER_ID } from "../parity/constants";
 
@@ -110,5 +111,67 @@ describe("buildReanchorUpdateSql user parameterization", () => {
     for (const clause of scoped) {
       expect(clause).toBe(`user_id = '${CLOUD_USER_ID}'`);
     }
+  });
+});
+
+/**
+ * Task 4: goals/blocks/recovery_snapshots/activities were generator-only —
+ * these lock the new scripts/lib/seed-rows.ts builders to the exact
+ * mappings generateSeedSql's goals/blocks/recovery_snapshots/activities
+ * sections encode (see that file for the payload/column split rationale),
+ * so scripts/lib/demo-reset.ts (Task 5) can't silently drift from the SQL
+ * seed.
+ */
+describe("generator-only row builders", () => {
+  const uid = "00000000-0000-0000-0000-000000000001";
+
+  it("toGoalRow mirrors the generator's goals mapping", () => {
+    const row = toGoalRow(seed.goal, uid);
+    expect(row).toEqual({
+      id: "goal-1",
+      user_id: uid,
+      name: seed.goal.name,
+      date: seed.goal.date,
+      target_seconds: seed.goal.goalSec,
+      payload: {
+        predictedSec: seed.goal.predictedSec,
+        daysOut: seed.goal.daysOut,
+        streak: seed.goal.streak,
+      },
+    });
+  });
+
+  it("toBlockRow mirrors the generator's blocks mapping", () => {
+    const row = toBlockRow(seed.block, seed.periodization, uid);
+    expect(row.label).toBe(seed.block.longRunLabel);
+    expect(row.periodization).toEqual(seed.periodization);
+    expect(row.payload).toEqual({
+      number: seed.block.number,
+      weekMilesDone: seed.block.weekMilesDone,
+      weekMilesTarget: seed.block.weekMilesTarget,
+    });
+  });
+
+  it("toRecoverySnapshotRow folds respRate into sleep and deltas into payload", () => {
+    const snapshot = seed.recovery[seed.recovery.length - 1];
+    const row = toRecoverySnapshotRow(snapshot, uid);
+    expect(row.day).toBe(snapshot.date);
+    expect(row.source).toBe("whoop");
+    expect(row.sleep).toEqual({ ...snapshot.sleep, respRate: snapshot.respRate });
+    expect(row.payload).toEqual({
+      recoveryDelta: snapshot.recoveryDelta,
+      hrvDeltaPct: snapshot.hrvDeltaPct,
+      rhrDelta: snapshot.rhrDelta,
+      loadLabel: snapshot.loadLabel,
+    });
+  });
+
+  it("toActivityRow computes ended_at = started_at + timeSec", () => {
+    const activity = seed.activities[0];
+    const row = toActivityRow(activity, uid);
+    expect(row.started_at).toBe(`${activity.date}T00:00:00Z`);
+    expect(Date.parse(row.ended_at) - Date.parse(row.started_at)).toBe(activity.timeSec * 1000);
+    expect(row.distance_m).toBeCloseTo(activity.distanceMi * 1609.344);
+    expect(row.payload).toEqual({ id: activity.id, title: activity.title, synced: activity.synced });
   });
 });
