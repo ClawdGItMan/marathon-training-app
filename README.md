@@ -1,5 +1,7 @@
 # Marathon Training App
 
+**Live:** https://marathon-training-app-brown.vercel.app — press **VIEW DEMO** on the sign-in page to enter a pre-seeded demo account (no signup).
+
 ## Overview
 A dark, editorial-styled running/marathon training app. This bundle documents the full set of core screens — **Progress, Recovery, Plan, Log, Strength**, a **Daily** home screen, and the headline feature: a **Runna-inspired Workout Detail** view (session structure breakdown + AI-suggested alternative). The visual system is calm and text-forward: near-black backgrounds, one structural accent, per-session-type accent colors, generously rounded cards, and a background-free tab bar.
 
